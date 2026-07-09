@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.tile.openstreetmap.org;" />
 <title>PathBrowser - 行動履歴ブラウザ</title>
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<link rel="stylesheet" href="vendor/leaflet.markercluster/MarkerCluster.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -90,6 +91,7 @@
           <button id="btn-timelapse-play" class="btn btn-icon" title="タイムラプス再生">&#9654;</button>
           <button id="btn-timelapse-reset" class="btn btn-icon" title="リセット">&#8634;</button>
           <button id="btn-export-png" class="btn btn-icon" title="PNGとして保存">&#128190;</button>
+          <button id="btn-photo-toggle" class="btn btn-icon" title="写真レイヤー">&#128247;</button>
         </div>
         <div id="timelapse-overlay" class="timelapse-overlay" hidden>
           <div id="timelapse-period" class="timelapse-period"></div>
@@ -118,6 +120,9 @@
         <div id="route-map"></div>
         <div id="route-message" class="route-message" hidden></div>
         <div id="route-legend" class="badge route-legend"></div>
+        <div id="route-controls" class="badge route-controls">
+          <button id="btn-route-photo-toggle" class="btn btn-icon" title="写真レイヤー">&#128247;</button>
+        </div>
       </div>
     </section>
 
@@ -184,12 +189,38 @@
         <button id="btn-clear-cache" class="btn">キャッシュをクリア</button>
         <p id="cache-clear-result" class="empty-note" hidden></p>
       </div>
+
+      <div id="settings-photo-section" class="settings-photo-section">
+        <h3>写真連携</h3>
+        <p class="settings-photo-text">
+          位置情報付きの写真があるフォルダを連携すると、撮影地点を制覇マップ・経路マップに重ねて表示できます。
+          読み取りはすべてローカルで行われ、外部には送信されません。プライバシーモードON時は写真レイヤー自体が無効になります。
+        </p>
+        <p id="photo-linked-folder" class="empty-note">未連携</p>
+        <div class="settings-photo-actions">
+          <button id="btn-link-photo-folder" class="btn">写真フォルダを選択</button>
+          <button id="btn-rescan-photo-folder" class="btn" hidden>再スキャン</button>
+        </div>
+        <div id="photo-scan-progress" class="progress-bar-track" hidden>
+          <div id="photo-scan-progress-fill" class="progress-bar-fill"></div>
+        </div>
+        <p id="photo-scan-summary" class="empty-note"></p>
+      </div>
     </section>
+
+    <div id="photo-lightbox-overlay" class="photo-lightbox-overlay" hidden>
+      <div id="photo-lightbox-panel">
+        <button id="btn-photo-lightbox-close" class="btn btn-icon photo-lightbox-close" title="閉じる">&times;</button>
+        <img id="photo-lightbox-img" alt="" />
+        <p id="photo-lightbox-caption"></p>
+      </div>
+    </div>
 
   </main>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/leaflet.markercluster/leaflet.markercluster.js"></script>
 <script type="module" src="app.mjs"></script>
 </body>
 </html>

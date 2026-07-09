@@ -93,7 +93,53 @@ html, body {
   font-size: 15px;
 }
 
-.btn-icon { padding: 6px 10px; }
+/* Icon-only buttons previously blended into their toolbar/badge background
+   (near-identical dark grays) and relied on the browser's slow native title
+   tooltip to explain themselves. Bigger glyphs + a visibly distinct chip
+   background/border + an instant custom tooltip (built from the existing
+   `title` attribute, so no markup changes needed) makes them noticeable and
+   self-explanatory without hovering-and-waiting. */
+.btn-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 17px;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.btn-icon:hover:not(:disabled) {
+  background: rgba(77, 163, 255, 0.18);
+  border-color: var(--color-accent);
+}
+
+.btn-icon::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #101216;
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 50;
+}
+.btn-icon:hover:not(:disabled)::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 
 .btn-privacy {
   display: flex;
@@ -792,4 +838,135 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   color: var(--color-text);
   border: 1px solid var(--color-border);
   font-size: 13px;
+}
+
+/* ---- Photo layer (写真連携 Stage1) ---- */
+
+.route-controls {
+  top: 12px;
+  left: auto;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+#btn-photo-toggle.active,
+#btn-route-photo-toggle.active {
+  background: var(--color-accent);
+  color: #101216;
+}
+
+.settings-photo-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.settings-photo-section h3 { font-size: 14px; color: var(--color-text-dim); margin: 0 0 8px; }
+.settings-photo-text {
+  font-size: 13px;
+  color: var(--color-text-dim);
+  max-width: 640px;
+  margin: 0 0 10px;
+}
+.settings-photo-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+#photo-linked-folder {
+  font-size: 12px;
+  word-break: break-all;
+}
+#photo-scan-progress {
+  max-width: 400px;
+  margin: 8px 0;
+}
+
+/* Individual photo pins use the map's marker pane sizing; the cluster
+   bubble gets its own magenta-family theme (distinct from the default
+   green/yellow/orange leaflet.markercluster palette) so it reads as "photos"
+   rather than being confused with any other clustered layer. */
+.photo-marker-cluster {
+  background-color: rgba(227, 119, 194, 0.35);
+  border-radius: 50%;
+}
+.photo-marker-cluster div {
+  width: 30px;
+  height: 30px;
+  margin-left: 3px;
+  margin-top: 3px;
+  background-color: rgba(227, 119, 194, 0.85);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  text-align: center;
+  color: #fff;
+  font: 600 12px "Helvetica Neue", Arial, sans-serif;
+}
+.photo-marker-cluster span { line-height: 30px; }
+
+.photo-popup { min-width: 160px; }
+.photo-popup-thumb-wrap {
+  width: 100%;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #10131a;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.photo-popup-thumb {
+  max-width: 220px;
+  max-height: 160px;
+  cursor: zoom-in;
+  display: block;
+}
+.photo-popup-loading,
+.photo-popup-unsupported {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  padding: 20px 10px;
+  text-align: center;
+}
+.photo-popup-meta { font-size: 12px; }
+.photo-popup-date { color: var(--color-text); margin-bottom: 2px; }
+.photo-popup-place { color: var(--color-text-dim); margin-bottom: 2px; }
+.photo-popup-source { color: var(--color-text-dim); font-size: 11px; }
+
+.photo-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+#photo-lightbox-panel {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#photo-lightbox-img {
+  max-width: 90vw;
+  max-height: 80vh;
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+#photo-lightbox-caption {
+  color: var(--color-text-dim);
+  font-size: 13px;
+  margin-top: 10px;
+}
+.photo-lightbox-close {
+  position: absolute;
+  top: -36px;
+  right: 0;
+  font-size: 20px;
 }

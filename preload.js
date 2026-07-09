@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('pathBrowser', {
   resolveRecentFile: (hash) => ipcRenderer.invoke('timeline:resolve-recent-file', hash),
   removeRecentFile: (hash) => ipcRenderer.invoke('timeline:remove-recent-file', hash),
   clearCache: () => ipcRenderer.invoke('cache:clear'),
+  choosePhotoFolder: () => ipcRenderer.invoke('photos:choose-folder'),
+  getLinkedPhotoFolder: () => ipcRenderer.invoke('photos:get-linked-folder'),
+  scanPhotoFolder: (folder) => ipcRenderer.invoke('photos:scan-folder', folder),
+  getPhotoThumbnail: (filePath) => ipcRenderer.invoke('photos:get-thumbnail', filePath),
   onProgress: (callback) => {
     const listener = (event, payload) => callback(payload);
     ipcRenderer.on('timeline:progress', listener);
@@ -25,5 +29,10 @@ contextBridge.exposeInMainWorld('pathBrowser', {
     const listener = (event, payload) => callback(payload);
     ipcRenderer.on('timeline:recluster-progress', listener);
     return () => ipcRenderer.removeListener('timeline:recluster-progress', listener);
+  },
+  onPhotoScanProgress: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on('photos:scan-progress', listener);
+    return () => ipcRenderer.removeListener('photos:scan-progress', listener);
   },
 });

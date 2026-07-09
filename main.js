@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Worker } = require('worker_threads');
@@ -8,6 +8,7 @@ const nominatim = require('./lib/nominatim');
 const exclusionZones = require('./lib/exclusionZones');
 const recentFiles = require('./lib/recentFiles');
 const geoCache = require('./lib/geoCache');
+const photoCache = require('./lib/photoCache');
 
 let mainWindow;
 let prefectureGeoJSONCache = null;
@@ -144,15 +145,90 @@ ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) 
   return nominatim.reverseGeocode(app.getPath('userData'), { placeId, lat, lng });
 });
 
-// Clears the two on-disk performance caches (municipality/clustering results,
-// Nominatim reverse-geocode labels). Does NOT touch recent-files history,
-// backups, or exclusion zones — those are user data/settings, not caches, and
-// this button is scoped to "make PathBrowser recompute from scratch" only.
+// Clears the on-disk performance caches (municipality/clustering results,
+// Nominatim reverse-geocode labels, scanned photo metadata). Does NOT touch
+// recent-files history, backups, exclusion zones, or the linked photo
+// folder itself — those are user data/settings, not caches, and this button
+// is scoped to "make PathBrowser recompute from scratch" only.
 ipcMain.handle('cache:clear', async () => {
   const userDataPath = app.getPath('userData');
   const geoCount = geoCache.clearCache(userDataPath);
   const nominatimCount = nominatim.clearCache(userDataPath);
-  return { geoCount, nominatimCount };
+  const photoCount = photoCache.clearEntries(userDataPath);
+  return { geoCount, nominatimCount, photoCount };
+});
+
+ipcMain.handle('photos:choose-folder', async () => {
+  if (process.env.PATHBROWSER_TEST_PHOTO_FOLDER) return process.env.PATHBROWSER_TEST_PHOTO_FOLDER;
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '写真フォルダを選択',
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('photos:get-linked-folder', async () => {
+  return photoCache.getLinkedFolder(app.getPath('userData'));
+});
+
+ipcMain.handle('photos:scan-folder', async (event, folder) => {
+  const userDataPath = app.getPath('userData');
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, 'worker', 'photoScanWorker.js'), {
+      workerData: { folder, userDataPath },
+    });
+
+    worker.on('message', (msg) => {
+      if (msg.type === 'progress') {
+        event.sender.send('photos:scan-progress', msg);
+      } else if (msg.type === 'done') {
+        resolve(msg.result);
+      } else if (msg.type === 'error') {
+        reject(new Error(msg.message));
+      }
+    });
+
+    worker.on('error', (err) => reject(err));
+  });
+});
+
+// Returns a base64 data: URL for on-demand display in a popup/lightbox
+// (fits the existing CSP's `img-src ... data:` allowance without needing a
+// custom protocol handler). HEIC isn't returned as image data — Chromium
+// can't render it in an <img> regardless of encoding — the renderer shows a
+// placeholder instead.
+//
+// Resized via Electron's built-in `nativeImage` (no extra native dependency,
+// so packaging/electron-builder is unaffected) rather than sending the
+// original file's full bytes — a modern phone photo is easily 5-15MB, and
+// with libraries in the hundreds-of-GB / tens-of-thousands-of-photos range,
+// shipping the untouched original over IPC for every popup/lightbox open
+// noticeably degrades responsiveness for no visual benefit (the popup thumb
+// and lightbox are both far smaller than a native photo's resolution
+// anyway). THUMBNAIL_MAX_DIMENSION is sized for the lightbox (the larger of
+// the two consumers — see photoView.mjs, which reuses this same result for
+// both), not just the small popup preview.
+const THUMBNAIL_MAX_DIMENSION = 1600;
+const THUMBNAIL_JPEG_QUALITY = 78;
+ipcMain.handle('photos:get-thumbnail', async (event, filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.heic') return { unsupported: true };
+  try {
+    let img = nativeImage.createFromPath(filePath);
+    if (img.isEmpty()) return { unsupported: true };
+    const { width, height } = img.getSize();
+    const longSide = Math.max(width, height);
+    if (longSide > THUMBNAIL_MAX_DIMENSION) {
+      const scale = THUMBNAIL_MAX_DIMENSION / longSide;
+      img = img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'good' });
+    }
+    const buf = img.toJPEG(THUMBNAIL_JPEG_QUALITY);
+    return { dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` };
+  } catch {
+    return { unsupported: true };
+  }
 });
 
 ipcMain.handle('timeline:get-zones', async () => {
