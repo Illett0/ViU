@@ -7,6 +7,7 @@ const { Worker } = require('worker_threads');
 const nominatim = require('./lib/nominatim');
 const exclusionZones = require('./lib/exclusionZones');
 const recentFiles = require('./lib/recentFiles');
+const geoCache = require('./lib/geoCache');
 
 let mainWindow;
 let prefectureGeoJSONCache = null;
@@ -141,6 +142,17 @@ ipcMain.handle('timeline:recluster', async (event, { fingerprint, threshold, poi
 
 ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) => {
   return nominatim.reverseGeocode(app.getPath('userData'), { placeId, lat, lng });
+});
+
+// Clears the two on-disk performance caches (municipality/clustering results,
+// Nominatim reverse-geocode labels). Does NOT touch recent-files history,
+// backups, or exclusion zones — those are user data/settings, not caches, and
+// this button is scoped to "make PathBrowser recompute from scratch" only.
+ipcMain.handle('cache:clear', async () => {
+  const userDataPath = app.getPath('userData');
+  const geoCount = geoCache.clearCache(userDataPath);
+  const nominatimCount = nominatim.clearCache(userDataPath);
+  return { geoCount, nominatimCount };
 });
 
 ipcMain.handle('timeline:get-zones', async () => {

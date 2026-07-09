@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('pathBrowser', {
   getRecentFiles: () => ipcRenderer.invoke('timeline:get-recent-files'),
   resolveRecentFile: (hash) => ipcRenderer.invoke('timeline:resolve-recent-file', hash),
   removeRecentFile: (hash) => ipcRenderer.invoke('timeline:remove-recent-file', hash),
+  clearCache: () => ipcRenderer.invoke('cache:clear'),
   onProgress: (callback) => {
     const listener = (event, payload) => callback(payload);
     ipcRenderer.on('timeline:progress', listener);

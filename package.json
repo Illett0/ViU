@@ -1,6 +1,6 @@
 {
   "name": "pathbrowser",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Googleタイムライン位置履歴から都道府県制覇マップ・移動統計を可視化するデスクトップアプリ",
   "main": "main.js",
   "author": "_Illett_",
@@ -43,13 +43,17 @@
     ],
     "win": {
       "target": [
-        { "target": "portable", "arch": ["x64"] },
         { "target": "nsis", "arch": ["x64"] }
       ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PathBrowser",
+      "menuCategory": false
     }
   }
 }

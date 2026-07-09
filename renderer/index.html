@@ -173,6 +173,17 @@
           <p id="zone-hidden-count" class="empty-note"></p>
         </div>
       </div>
+
+      <div id="settings-cache-section" class="settings-cache-section">
+        <h3>キャッシュ</h3>
+        <p class="settings-cache-text">
+          市区町村判定・クラスタリング結果とNominatimの地名取得結果はディスクにキャッシュされ、
+          次回以降の読み込みを高速化しています。挙動がおかしい場合や、ディスク容量を空けたい場合は
+          クリアしてください（除外ゾーンや最近使ったファイルの履歴は削除されません）。
+        </p>
+        <button id="btn-clear-cache" class="btn">キャッシュをクリア</button>
+        <p id="cache-clear-result" class="empty-note" hidden></p>
+      </div>
     </section>
 
   </main>

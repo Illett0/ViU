@@ -116,6 +116,8 @@ const el = {
   btnZoneCancel: document.getElementById('btn-zone-cancel'),
   zoneList: document.getElementById('zone-list'),
   zoneHiddenCount: document.getElementById('zone-hidden-count'),
+  btnClearCache: document.getElementById('btn-clear-cache'),
+  cacheClearResult: document.getElementById('cache-clear-result'),
   dayViewOverlay: document.getElementById('day-view-overlay'),
   dayViewTitle: document.getElementById('day-view-title'),
   dayViewMapDiv: document.getElementById('day-view-map'),
@@ -588,22 +590,24 @@ function renderMapTab(derived) {
   if (state.granularity === 'prefecture') {
     // Runs even when drilled into a prefecture/place — intentionally: the
     // dimmed national choropleth stays visible as a backdrop, with the
-    // current prefecture's border highlighted via `selectedCode`. The actual
-    // bug was the click handler: it stayed fully live even while dimmed, so
-    // this freshly-recreated-every-render layer (which always ends up on
-    // top of the never-recreated marker layer group in DOM order) silently
-    // swallowed clicks meant for pins underneath — anywhere on the map, not
-    // just near the pin, since the choropleth covers the whole viewport.
-    // Once drilled in, re-clicking the backdrop shouldn't navigate anywhere
-    // (interaction happens via the pins/list instead); real click priority
-    // for pins is additionally guaranteed via a dedicated marker pane, see
-    // renderClusterMarkers in mapView.mjs.
+    // current prefecture's border highlighted via `selectedCode`, and clicking
+    // a *different* prefecture on that backdrop should switch straight to it
+    // (no need to back out to the national view first). Click priority for
+    // pins is guaranteed independently of this handler via a dedicated marker
+    // pane (see renderClusterMarkers in mapView.mjs, zIndex above the
+    // choropleth's pane), so a click that actually lands on a pin always hits
+    // the pin first — this handler only ever fires for clicks that land on
+    // the polygon backdrop itself. (Previously this handler was disabled
+    // entirely whenever `dimmed` was true, as a broader-than-necessary
+    // workaround for the pin-click-swallowing bug; that also disabled
+    // switching prefectures once drilled in, which is the regression this
+    // restores.)
     renderNational(
       map,
       geojsonLayerRef,
       state.prefGeoJSON,
       derived.periodAggregates,
-      dimmed ? () => {} : (code) => {
+      (code) => {
         navigateTo(state, 'prefecture', { code });
         render();
       },
@@ -923,7 +927,7 @@ function renderPlaceDetail(derived, params) {
   const prefEntry = derived.periodAggregates.get(code);
   const parts = [];
 
-  parts.push('<button class="back-link" data-nav="back">← 滞在地点一覧に戻る</button>');
+  parts.push('<button class="back-link" data-nav="back">← 都道府県に戻る</button>');
 
   if (clusterId != null && !state.privacy) {
     const memberVisits = derived.displayData.visits.filter((v) => v.clusterId === clusterId).sort((a, b) => a.startEpoch - b.startEpoch);
@@ -1313,6 +1317,19 @@ el.btnPrivacy.addEventListener('click', () => setPrivacy(!state.privacy));
 el.btnSettings.addEventListener('click', () => openSettings());
 el.btnSettingsClose.addEventListener('click', closeSettings);
 el.btnSettingsGotoMap.addEventListener('click', closeSettings);
+
+el.btnClearCache.addEventListener('click', async () => {
+  const proceed = confirm('市区町村判定・クラスタリング結果とNominatimの地名キャッシュを削除します。次回ファイルを開いたときに再計算されます（除外ゾーンや最近使ったファイルの履歴は削除されません）。続けますか？');
+  if (!proceed) return;
+  el.btnClearCache.disabled = true;
+  try {
+    const { geoCount, nominatimCount } = await window.pathBrowser.clearCache();
+    el.cacheClearResult.hidden = false;
+    el.cacheClearResult.textContent = `キャッシュをクリアしました（判定結果 ${geoCount}件、地名 ${nominatimCount}件）。`;
+  } finally {
+    el.btnClearCache.disabled = false;
+  }
+});
 
 el.btnPrivacyNoticeContinue.addEventListener('click', () => {
   el.privacyNoticeScreen.hidden = true;
