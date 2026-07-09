@@ -1,0 +1,20 @@
+{
+  "name": "pathbrowser",
+  "version": "1.0.0",
+  "description": "Googleタイムライン位置履歴から都道府県制覇マップ・移動統計を可視化するデスクトップアプリ",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "fetch:boundaries": "node scripts/fetch-municipality-boundaries.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^43.0.0"
+  },
+  "dependencies": {
+    "@turf/bbox": "^7.1.0",
+    "@turf/boolean-point-in-polygon": "^7.1.0",
+    "@turf/helpers": "^7.1.0",
+    "leaflet": "^1.9.4"
+  }
+}

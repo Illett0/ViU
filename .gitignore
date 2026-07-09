@@ -1,0 +1,41 @@
+node_modules/
+*.log
+
+# Personal location-history data — never commit real Google Takeout exports.
+# main.js only reads timeline/ via the PATHBROWSER_TEST_FILE dev/test escape
+# hatch (see main.js); normal app usage imports via the file picker and never
+# needs this folder tracked at all.
+/timeline/
+*.takeout.json
+タイムライン*.json
+
+# Electron/user-data-style local caches (geo-cache/, nominatim-cache.json,
+# exclusion-zones.json — see lib/geoCache.js, lib/nominatim.js,
+# lib/exclusionZones.js), in case any ever end up inside the project folder
+# during dev instead of app.getPath('userData'). The real runtime location is
+# outside the repo; this is a defensive backstop only.
+geo-cache/
+nominatim-cache.json
+exclusion-zones.json
+# lib/recentFiles.js — recent-files.json (metadata) + timeline-backups/ (full
+# copies of imported Timeline exports, for the "reopen from history" feature).
+# The backup copies are exactly the kind of personal data this project must
+# never leak, so this entry matters even more than the others above.
+recent-files.json
+timeline-backups/
+
+# Build output / OS / editor cruft.
+dist/
+out/
+build/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env
+.env.*
+
+# scripts/fetch-municipality-boundaries.js backs up the previous
+# data/municipalities.geojson to *.bak before overwriting — not personal
+# data, just a leftover working copy that shouldn't bloat the repo.
+*.bak

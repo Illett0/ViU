@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.tile.openstreetmap.org;" />
+<title>PathBrowser - 行動履歴ブラウザ</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <header id="app-header">
+    <div class="header-left">
+      <h1>PathBrowser</h1>
+      <button id="btn-open-file" class="btn">ファイルを開く</button>
+    </div>
+
+    <nav id="breadcrumb" aria-label="パンくずリスト"></nav>
+
+    <div class="header-right">
+      <div id="period-filter" class="period-filter" hidden>
+        <label>年 <select id="filter-year"><option value="">すべて</option></select></label>
+        <label>月 <select id="filter-month"><option value="">すべて</option></select></label>
+      </div>
+      <div id="cluster-filter" class="cluster-filter" hidden>
+        <label title="近接する滞在地点をまとめる距離のしきい値">
+          クラスタ距離 <span id="cluster-threshold-label">50m</span>
+          <input type="range" id="cluster-threshold" min="20" max="200" step="10" value="50" />
+        </label>
+      </div>
+      <div class="history-nav">
+        <button id="btn-back" class="btn btn-icon" title="戻る" disabled>&#8592;</button>
+        <button id="btn-forward" class="btn btn-icon" title="進む" disabled>&#8594;</button>
+      </div>
+      <button id="btn-settings" class="btn" hidden>&#9881; 設定</button>
+      <button id="btn-privacy" class="btn btn-privacy" title="プライバシー保護モードの切り替え">
+        <span id="privacy-icon">&#128274;</span>
+        <span id="privacy-label">プライバシーモード ON</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="tabs" hidden>
+    <button class="tab-btn active" data-tab="map">県制覇マップ</button>
+    <button class="tab-btn" data-tab="route" id="tab-route">経路マップ</button>
+    <button class="tab-btn" data-tab="chronology">年表</button>
+    <button class="tab-btn" data-tab="stats">移動統計</button>
+  </div>
+
+  <main id="app-main">
+
+    <section id="welcome-screen">
+      <h2>Googleタイムラインの位置履歴を読み込む</h2>
+      <p>Googleマップからエクスポートしたタイムライン(JSON)ファイルを開いてください。</p>
+      <button id="btn-open-file-main" class="btn btn-primary">ファイルを選択</button>
+      <div id="recent-files-section" hidden>
+        <h3>最近使ったファイル</h3>
+        <ul id="recent-files-list" class="recent-files-list"></ul>
+      </div>
+    </section>
+
+    <section id="progress-screen" hidden>
+      <h2>読み込み中...</h2>
+      <div class="progress-bar-track">
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+      <p id="progress-label"></p>
+    </section>
+
+    <section id="privacy-notice-screen" hidden>
+      <h2>プライバシーに関するご注意</h2>
+      <p class="privacy-notice-text">
+        このあとの画面で、ご自宅や職場など人に見られたくない場所を「除外ゾーン」として
+        設定します。画面共有や録画をしている場合は、位置情報が映り込まないようご注意ください。
+      </p>
+      <button id="btn-privacy-notice-continue" class="btn btn-primary">続ける</button>
+    </section>
+
+    <section id="map-screen" hidden>
+      <div id="map-panel">
+        <div id="leaflet-map"></div>
+        <div id="prefecture-count-badge" class="badge"></div>
+        <div id="island-badge" class="badge island-badge" hidden></div>
+        <div id="map-controls" class="badge map-controls">
+          <div class="granularity-toggle">
+            <button class="granularity-btn active" data-granularity="prefecture">都道府県</button>
+            <button class="granularity-btn" data-granularity="municipality">市区町村</button>
+          </div>
+          <button id="btn-timelapse-play" class="btn btn-icon" title="タイムラプス再生">&#9654;</button>
+          <button id="btn-timelapse-reset" class="btn btn-icon" title="リセット">&#8634;</button>
+          <button id="btn-export-png" class="btn btn-icon" title="PNGとして保存">&#128190;</button>
+        </div>
+        <div id="timelapse-overlay" class="timelapse-overlay" hidden>
+          <div id="timelapse-period" class="timelapse-period"></div>
+          <div id="timelapse-count" class="timelapse-count"></div>
+        </div>
+      </div>
+      <aside id="detail-panel">
+        <div id="detail-panel-content"></div>
+      </aside>
+    </section>
+
+    <div id="day-view-overlay" class="day-view-overlay" hidden>
+      <div id="day-view-panel">
+        <div id="day-view-header">
+          <h2 id="day-view-title"></h2>
+          <button id="btn-day-view-close" class="btn">閉じる</button>
+        </div>
+        <div id="day-view-map"></div>
+        <div id="day-view-message" class="route-message" hidden></div>
+        <div id="day-view-legend" class="badge route-legend"></div>
+      </div>
+    </div>
+
+    <section id="route-screen" hidden>
+      <div id="route-panel">
+        <div id="route-map"></div>
+        <div id="route-message" class="route-message" hidden></div>
+        <div id="route-legend" class="badge route-legend"></div>
+      </div>
+    </section>
+
+    <section id="chronology-screen" hidden>
+      <div id="chronology-toolbar">
+        <label><input type="checkbox" id="chronology-include-muni" /> 市区町村の初訪問も含める</label>
+      </div>
+      <div id="chronology-content"></div>
+    </section>
+
+    <section id="stats-screen" hidden>
+      <div id="stats-content"></div>
+    </section>
+
+    <section id="settings-screen" hidden>
+      <div id="settings-header">
+        <h2>設定 — 除外ゾーン</h2>
+        <button id="btn-settings-close" class="btn">閉じる</button>
+      </div>
+      <div id="settings-import-banner" class="settings-import-banner" hidden>
+        <p>
+          データを読み込みました。ブラウズを始める前に、自宅・職場など人に見られたくない場所を
+          除外ゾーンとして登録できます（あとで「設定」からいつでも変更できます）。
+        </p>
+        <button id="btn-settings-goto-map" class="btn btn-primary">マップへ &#8594;</button>
+      </div>
+      <p class="settings-intro">
+        指定した円の範囲は「なかったことにする」エリアとして、地図のピン・
+        滞在場所ランキング・経路・訪問一覧から常に除外されます（都道府県/
+        市区町村の訪問判定や合計距離などの集計値には影響しません）。
+      </p>
+
+      <div id="zone-suggestions"></div>
+
+      <div id="settings-body">
+        <div id="zone-map-panel">
+          <div id="zone-map"></div>
+          <p class="settings-hint">地図をクリックして中心を指定してください。</p>
+        </div>
+        <div id="zone-side-panel">
+          <div id="zone-pending" hidden>
+            <h3>新しいゾーン</h3>
+            <label>半径 <span id="zone-radius-label">300m</span>
+              <input type="range" id="zone-radius" min="100" max="3000" step="50" value="300" />
+            </label>
+            <div class="zone-pending-actions">
+              <button id="btn-zone-confirm" class="btn btn-primary">追加</button>
+              <button id="btn-zone-cancel" class="btn">キャンセル</button>
+            </div>
+          </div>
+          <h3>登録済みのゾーン</h3>
+          <ul id="zone-list" class="zone-list"></ul>
+          <p id="zone-hidden-count" class="empty-note"></p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script type="module" src="app.mjs"></script>
+</body>
+</html>
