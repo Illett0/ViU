@@ -74,7 +74,7 @@ https://raw.githubusercontent.com/dataofjapan/land/master/japan.geojson
 https://raw.githubusercontent.com/smartnews-smri/japan-topography/main/data/municipality/geojson/s0001/N03-21_210101.json
 ```
 
-簡素化0.1%版は1市区町村あたり平均17.6頂点しかなく、境界の粒度が粗い（「境界がめっちゃ雑」の直接の原因）。同じ提供元・同じ出典表示で簡素化1%版（`s0010`、全国版ファイルはなく都道府県ごとに47ファイル、かつプロパティが国土数値情報の生の列名N03_001/N03_003/N03_004/N03_007のまま）に差し替えることで精度を上げられる。`scripts/fetch-municipality-boundaries.js`（`npm run fetch:boundaries`）が47ファイルの取得・列名変換・飛び地のMultiPolygon統合をまとめて行うので、通常のインターネット接続がある環境で一度実行すれば良い。（この変換スクリプトは、開発時に使っていたサンドボックス環境のfetchツールが大きいレスポンスを黙って切り詰めてしまい、47ファイル分を安全に取得できなかったため、データそのものではなくスクリプトとして同梱している。）
+簡素化0.1%版は1市区町村あたり平均17.6頂点しかなく、境界の見た目が粗くなる直接の原因になっています。同じ提供元・同じ出典表示の簡素化1%版（`s0010`、全国版ファイルはなく都道府県ごとに47ファイル、かつプロパティが国土数値情報の生の列名N03_001/N03_003/N03_004/N03_007のまま）に差し替えることで精度を上げられます。`scripts/fetch-municipality-boundaries.js`（`npm run fetch:boundaries`）が47ファイルの取得・列名変換・飛び地のMultiPolygon統合をまとめて行うので、通常のインターネット接続がある環境で一度実行すれば十分です。データそのものではなくスクリプトとして同梱しているのは、47ファイルの一括取得は実行環境によって不安定になりやすく、取得結果を都度確認しながら反映する方が安全なためです。
 
 ## 技術構成
 
@@ -158,3 +158,7 @@ npm run dist
 ## ライセンス
 
 [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)。非営利目的での利用・改変・再配布は自由ですが、商用利用は許可されていません。詳細は[LICENSE](LICENSE)を参照してください。
+
+---
+
+*本アプリは個人がAIとの対話を活用しながら開発したもの（いわゆるvibe coding）で、商用ソフトウェアと同等の品質保証・保守体制は前提としていません。不具合や改善点があればIssueで報告してもらえると助かります。*
