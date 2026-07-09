@@ -927,7 +927,8 @@ function renderPlaceDetail(derived, params) {
   const prefEntry = derived.periodAggregates.get(code);
   const parts = [];
 
-  parts.push('<button class="back-link" data-nav="back">← 都道府県に戻る</button>');
+  const backLabel = state.granularity === 'municipality' ? '市区町村マップに戻る' : '都道府県に戻る';
+  parts.push(`<button class="back-link" data-nav="back">← ${backLabel}</button>`);
 
   if (clusterId != null && !state.privacy) {
     const memberVisits = derived.displayData.visits.filter((v) => v.clusterId === clusterId).sort((a, b) => a.startEpoch - b.startEpoch);

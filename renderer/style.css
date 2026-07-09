@@ -360,10 +360,15 @@ html, body {
 }
 /* Lighten only the base tile imagery (not the polylines/markers drawn in the
    overlay pane above it) so route lines stand out against a less "濃い"
-   (heavy/dark) basemap. */
-#route-map .leaflet-tile-pane {
-  filter: brightness(1.4) saturate(0.5) contrast(0.9);
-  opacity: 0.85;
+   (heavy/dark) basemap. Kept subtle — an earlier, stronger version
+   (brightness 1.4 / saturate 0.5 / opacity 0.85) washed the tiles out too
+   much to read place names/roads against. Applied to both the main route map
+   and the per-day route map (day-view), which previously didn't get this
+   treatment at all. */
+#route-map .leaflet-tile-pane,
+#day-view-map .leaflet-tile-pane {
+  filter: brightness(1.15) saturate(0.75);
+  opacity: 0.95;
 }
 .route-message {
   position: absolute;
