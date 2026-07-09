@@ -1,6 +1,6 @@
 {
   "name": "pathbrowser",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Googleタイムライン位置履歴から都道府県制覇マップ・移動統計を可視化するデスクトップアプリ",
   "main": "main.js",
   "author": "_Illett_",
