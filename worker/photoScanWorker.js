@@ -90,21 +90,28 @@ function readTakeoutSidecar(sidecarPath) {
   }
 }
 
+// A single `exifr.parse(filePath)` call with default options returns a
+// merged object containing both the translated GPS decimal coordinates
+// (`latitude`/`longitude`, when a GPS block is present) and `DateTimeOriginal`
+// (when present) from one read of the file — verified empirically against a
+// real Exif-tagged JPEG. Previously this made two separate exifr calls
+// (`exifr.gps()` + `exifr.parse(file, ['DateTimeOriginal'])`), each opening
+// the file independently; with libraries in the tens-of-thousands-of-photos
+// range that doubled the I/O cost of the scan for no benefit, so this was
+// consolidated into one call.
 async function readExif(filePath) {
-  let gps = null;
-  let dateTimeOriginal = null;
   try {
-    gps = await exifr.gps(filePath);
+    const tags = await exifr.parse(filePath);
+    if (!tags) return { gps: null, dateTimeOriginal: null }; // No Exif segment at all (exifr returns undefined, not an error).
+    const gps =
+      typeof tags.latitude === 'number' && typeof tags.longitude === 'number' ? { latitude: tags.latitude, longitude: tags.longitude } : null;
+    const dateTimeOriginal = tags.DateTimeOriginal instanceof Date ? tags.DateTimeOriginal.getTime() : null;
+    return { gps, dateTimeOriginal };
   } catch {
-    // Not a format exifr recognizes, or no GPS block — leave gps null.
+    // Not a format exifr recognizes, corrupt file, etc. — both fields fall
+    // back to Takeout/mtime in scanOne below.
+    return { gps: null, dateTimeOriginal: null };
   }
-  try {
-    const tags = await exifr.parse(filePath, ['DateTimeOriginal']);
-    if (tags && tags.DateTimeOriginal instanceof Date) dateTimeOriginal = tags.DateTimeOriginal.getTime();
-  } catch {
-    // Leave dateTimeOriginal null; taken-at falls back to Takeout/mtime below.
-  }
-  return { gps, dateTimeOriginal };
 }
 
 async function scanOne(filePath, dirFilesCache) {

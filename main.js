@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Worker } = require('worker_threads');
@@ -198,14 +198,34 @@ ipcMain.handle('photos:scan-folder', async (event, folder) => {
 // (fits the existing CSP's `img-src ... data:` allowance without needing a
 // custom protocol handler). HEIC isn't returned as image data — Chromium
 // can't render it in an <img> regardless of encoding — the renderer shows a
-// placeholder instead; thumbnail optimization/resizing is deferred to Stage 2.
+// placeholder instead.
+//
+// Resized via Electron's built-in `nativeImage` (no extra native dependency,
+// so packaging/electron-builder is unaffected) rather than sending the
+// original file's full bytes — a modern phone photo is easily 5-15MB, and
+// with libraries in the hundreds-of-GB / tens-of-thousands-of-photos range,
+// shipping the untouched original over IPC for every popup/lightbox open
+// noticeably degrades responsiveness for no visual benefit (the popup thumb
+// and lightbox are both far smaller than a native photo's resolution
+// anyway). THUMBNAIL_MAX_DIMENSION is sized for the lightbox (the larger of
+// the two consumers — see photoView.mjs, which reuses this same result for
+// both), not just the small popup preview.
+const THUMBNAIL_MAX_DIMENSION = 1600;
+const THUMBNAIL_JPEG_QUALITY = 78;
 ipcMain.handle('photos:get-thumbnail', async (event, filePath) => {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.heic') return { unsupported: true };
   try {
-    const buf = fs.readFileSync(filePath);
-    const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
-    return { dataUrl: `data:${mime};base64,${buf.toString('base64')}` };
+    let img = nativeImage.createFromPath(filePath);
+    if (img.isEmpty()) return { unsupported: true };
+    const { width, height } = img.getSize();
+    const longSide = Math.max(width, height);
+    if (longSide > THUMBNAIL_MAX_DIMENSION) {
+      const scale = THUMBNAIL_MAX_DIMENSION / longSide;
+      img = img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'good' });
+    }
+    const buf = img.toJPEG(THUMBNAIL_JPEG_QUALITY);
+    return { dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` };
   } catch {
     return { unsupported: true };
   }
