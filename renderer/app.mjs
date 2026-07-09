@@ -11,6 +11,7 @@ import {
   clearMarkers,
 } from './mapView.mjs';
 import { initRouteMap, renderRoute, clearRoute, colorForMode } from './routeView.mjs';
+import { renderPhotoLayer, clearPhotoLayer } from './photoView.mjs';
 import { renderStats, modeLabel, formatDuration } from './statsView.mjs';
 import { initZoneMap, renderZoneCircles, renderPendingCircle, renderZoneList, renderSuggestions } from './settingsView.mjs';
 import { renderChronology } from './chronologyView.mjs';
@@ -56,6 +57,9 @@ state.timelapse = { playing: false, timer: null, steps: [], index: -1 };
 // existing disk cache in lib/nominatim.js (keyed by placeId/coords), so this
 // is purely a renderer-side memo to avoid redundant IPC round-trips.
 state.placeLabelCache = new Map(); // clusterId -> { status: 'pending'|'done'|'error', label }
+state.photos = []; // scanned photos with a location ({filePath, lat, lng, takenAtMs, takenAtIsFallback, source})
+state.photoLayerVisible = false;
+state.linkedPhotoFolder = null;
 
 const el = {
   btnOpen: document.getElementById('btn-open-file'),
@@ -124,6 +128,18 @@ const el = {
   dayViewMessage: document.getElementById('day-view-message'),
   dayViewLegend: document.getElementById('day-view-legend'),
   btnDayViewClose: document.getElementById('btn-day-view-close'),
+  btnPhotoToggle: document.getElementById('btn-photo-toggle'),
+  btnRoutePhotoToggle: document.getElementById('btn-route-photo-toggle'),
+  photoLinkedFolder: document.getElementById('photo-linked-folder'),
+  btnLinkPhotoFolder: document.getElementById('btn-link-photo-folder'),
+  btnRescanPhotoFolder: document.getElementById('btn-rescan-photo-folder'),
+  photoScanProgress: document.getElementById('photo-scan-progress'),
+  photoScanProgressFill: document.getElementById('photo-scan-progress-fill'),
+  photoScanSummary: document.getElementById('photo-scan-summary'),
+  photoLightboxOverlay: document.getElementById('photo-lightbox-overlay'),
+  photoLightboxImg: document.getElementById('photo-lightbox-img'),
+  photoLightboxCaption: document.getElementById('photo-lightbox-caption'),
+  btnPhotoLightboxClose: document.getElementById('btn-photo-lightbox-close'),
 };
 
 let map = null;
@@ -135,6 +151,8 @@ let zoneMap = null;
 let lastMapContext = null; // tracks view+granularity so we only fitBounds on real navigation, not on every pan/zoom redraw
 let pendingZoneCenter = null;
 const geojsonLayerRef = { layer: null };
+const photoLayerRef = { layer: null }; // 制覇マップ側の写真レイヤー
+const routePhotoLayerRef = { layer: null }; // 経路マップ側の写真レイヤー（別Leafletインスタンスなので別レイヤー参照が要る）
 const markerLayerRef = { layer: null };
 const routeLayerRef = { layer: null };
 const zoneLayerRef = { layer: null };
@@ -224,6 +242,117 @@ async function openRecentFile(hash) {
 }
 
 refreshRecentFilesList();
+
+// ---------- Photo layer (写真連携 Stage1) ----------
+
+function resolvePlaceName(lat, lng) {
+  if (!state.muniGeoJSON) return null;
+  const code = findMunicipalityCodeForPoint(state.muniGeoJSON, lat, lng);
+  return code ? municipalityName(state.municipalityByCode, code) : null;
+}
+
+// Reuses state.filter.year/month (the same period filter driving the map and
+// stats), but — unlike visits/activities, which carry a per-point UTC-offset
+// for exact local-calendar-day math (see worker/parseWorker.js) — a photo's
+// taken-at timestamp is just read against the host machine's local timezone.
+// Good enough for a year/month filter; a trip that crosses a timezone
+// boundary won't meaningfully change which month a photo falls in.
+function photoMatchesPeriod(photo) {
+  const { year, month } = state.filter;
+  if (year == null && month == null) return true;
+  if (photo.takenAtMs == null) return false;
+  const d = new Date(photo.takenAtMs);
+  if (year != null && d.getFullYear() !== year) return false;
+  if (month != null && d.getMonth() + 1 !== month) return false;
+  return true;
+}
+
+function getVisiblePhotos() {
+  if (state.privacy) return []; // Photo layer is disabled entirely under privacy mode, like the route map.
+  return state.photos.filter((p) => photoMatchesPeriod(p) && !isInAnyZone(p.lat, p.lng, state.zones));
+}
+
+function openPhotoLightbox(dataUrl, photo) {
+  el.photoLightboxImg.src = dataUrl;
+  const name = photo.filePath.split(/[\\/]/).pop();
+  const place = resolvePlaceName(photo.lat, photo.lng);
+  el.photoLightboxCaption.textContent = [name, place].filter(Boolean).join(' — ');
+  el.photoLightboxOverlay.hidden = false;
+}
+
+function closePhotoLightbox() {
+  el.photoLightboxOverlay.hidden = true;
+  el.photoLightboxImg.src = ''; // Release the (potentially large) decoded image promptly.
+}
+
+function togglePhotoLayer() {
+  if (state.privacy) return; // Buttons are disabled in this state too; belt and suspenders.
+  state.photoLayerVisible = !state.photoLayerVisible;
+  el.btnPhotoToggle.classList.toggle('active', state.photoLayerVisible);
+  el.btnRoutePhotoToggle.classList.toggle('active', state.photoLayerVisible);
+  render();
+}
+
+function formatPhotoScanSummary(summary) {
+  if (!summary) return '';
+  return `${summary.total}枚中 ${summary.withLocation}枚に位置情報が見つかりました（Exif ${summary.withLocationExif} / Takeout ${summary.withLocationTakeout}）`;
+}
+
+async function startPhotoScan(folder) {
+  el.btnLinkPhotoFolder.disabled = true;
+  el.btnRescanPhotoFolder.disabled = true;
+  el.photoScanProgress.hidden = false;
+  el.photoScanProgressFill.style.width = '0%';
+  el.photoScanSummary.textContent = 'スキャン中...';
+
+  const unsubscribe = window.pathBrowser.onPhotoScanProgress((payload) => {
+    const pct = payload.total > 0 ? Math.round((payload.current / payload.total) * 100) : 0;
+    el.photoScanProgressFill.style.width = pct + '%';
+    el.photoScanSummary.textContent = `スキャン中... (${payload.current}/${payload.total})`;
+  });
+
+  try {
+    const result = await window.pathBrowser.scanPhotoFolder(folder);
+    state.linkedPhotoFolder = folder;
+    state.photos = (result.photos || []).filter((p) => p.hasLocation);
+    el.photoLinkedFolder.textContent = folder;
+    el.photoScanSummary.textContent = formatPhotoScanSummary(result.summary);
+    el.btnRescanPhotoFolder.hidden = false;
+  } catch (err) {
+    el.photoScanSummary.textContent = `スキャンに失敗しました: ${err && err.message ? err.message : err}`;
+  } finally {
+    unsubscribe();
+    el.photoScanProgress.hidden = true;
+    el.btnLinkPhotoFolder.disabled = false;
+    el.btnRescanPhotoFolder.disabled = false;
+    render(); // No-op until a timeline file is loaded (render() itself guards on state.raw).
+  }
+}
+
+// Runs once at startup: if a folder was linked in a previous session,
+// re-scan it (cheap — unchanged files are skipped via the on-disk cache, see
+// worker/photoScanWorker.js) so photos are already available the moment the
+// user toggles the layer on, without an extra manual "re-scan" click.
+async function initPhotoLink() {
+  const folder = await window.pathBrowser.getLinkedPhotoFolder();
+  if (!folder) return;
+  el.photoLinkedFolder.textContent = folder;
+  el.btnRescanPhotoFolder.hidden = false;
+  await startPhotoScan(folder);
+}
+
+initPhotoLink();
+
+el.btnLinkPhotoFolder.addEventListener('click', async () => {
+  const folder = await window.pathBrowser.choosePhotoFolder();
+  if (folder) await startPhotoScan(folder);
+});
+el.btnRescanPhotoFolder.addEventListener('click', () => {
+  if (state.linkedPhotoFolder) startPhotoScan(state.linkedPhotoFolder);
+});
+el.btnPhotoToggle.addEventListener('click', togglePhotoLayer);
+el.btnRoutePhotoToggle.addEventListener('click', togglePhotoLayer);
+el.btnPhotoLightboxClose.addEventListener('click', closePhotoLightbox);
 
 // ---------- File loading ----------
 
@@ -475,6 +604,12 @@ function render() {
   el.tabRoute.disabled = state.privacy;
   if (state.privacy && state.tab === 'route') state.tab = 'map';
 
+  el.btnPhotoToggle.disabled = state.privacy;
+  el.btnRoutePhotoToggle.disabled = state.privacy;
+  if (state.privacy) state.photoLayerVisible = false;
+  el.btnPhotoToggle.classList.toggle('active', state.photoLayerVisible);
+  el.btnRoutePhotoToggle.classList.toggle('active', state.photoLayerVisible);
+
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === state.tab);
   });
@@ -682,6 +817,12 @@ function renderMapTab(derived) {
       if (fit) zoomToSelectedMarker(view.params);
     }
   }
+
+  if (state.photoLayerVisible) {
+    renderPhotoLayer(map, photoLayerRef, getVisiblePhotos(), { resolvePlaceName, onOpenLightbox: openPhotoLightbox });
+  } else {
+    clearPhotoLayer(map, photoLayerRef);
+  }
 }
 
 // Gives the currently-selected 滞在地点's pin a visibly distinct style (bigger,
@@ -735,6 +876,15 @@ const routeHiddenModes = new Set();
 function renderRouteTab(derived) {
   if (!routeMap) routeMap = initRouteMap(el.routeMapDiv);
   routeMap.invalidateSize();
+
+  // Rendered unconditionally (before the "no route data" early-return below)
+  // — photos for the current period can exist even when there's no route
+  // data to draw (e.g. a period with photos but no GPS trace that day).
+  if (state.photoLayerVisible) {
+    renderPhotoLayer(routeMap, routePhotoLayerRef, getVisiblePhotos(), { resolvePlaceName, onOpenLightbox: openPhotoLightbox });
+  } else {
+    clearPhotoLayer(routeMap, routePhotoLayerRef);
+  }
 
   // No longer requires a year filter — with mode-accurate rendering the
   // full-history segment count (~8-9k) comfortably fits under routeView's
