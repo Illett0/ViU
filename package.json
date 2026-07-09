@@ -3,18 +3,53 @@
   "version": "1.0.0",
   "description": "Googleタイムライン位置履歴から都道府県制覇マップ・移動統計を可視化するデスクトップアプリ",
   "main": "main.js",
+  "author": "_Illett_",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Illett0/PathBrowser.git"
+  },
   "scripts": {
     "start": "electron .",
-    "fetch:boundaries": "node scripts/fetch-municipality-boundaries.js"
+    "fetch:boundaries": "node scripts/fetch-municipality-boundaries.js",
+    "dist": "electron-builder"
   },
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
-    "electron": "^43.0.0"
+    "electron": "^43.0.0",
+    "electron-builder": "^26.0.0"
   },
   "dependencies": {
     "@turf/bbox": "^7.1.0",
     "@turf/boolean-point-in-polygon": "^7.1.0",
     "@turf/helpers": "^7.1.0",
     "leaflet": "^1.9.4"
+  },
+  "build": {
+    "appId": "dev.illett.pathbrowser",
+    "productName": "PathBrowser",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "worker/**/*",
+      "renderer/**/*",
+      "data/**/*",
+      "package.json",
+      "!node_modules/**/{test,tests,example,examples,*.md}",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] },
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

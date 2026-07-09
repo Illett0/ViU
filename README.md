@@ -4,9 +4,15 @@ Googleマップの位置情報タイムライン（エクスポートJSON）を�
 
 Googleマップ純正のタイムラインが「1日単位の振り返り」であるのに対し、本アプリは**累積データの俯瞰・可視化**に特化しています。
 
-## クイックスタート
+## ダウンロード
 
-Node.jsが必要です（Electron 43系が動作するバージョン）。
+Node.jsの知識がなくても使えます。[Releases](../../releases)ページから最新版の`PathBrowser-Setup.exe`（インストーラ版）または`PathBrowser-portable.exe`（インストール不要・そのまま起動できる版）をダウンロードして実行してください。
+
+署名なしの実行ファイルのため、初回起動時にWindows SmartScreenの警告（「WindowsによってPCが保護されました」）が表示されることがあります。「詳細情報」→「実行」で起動できます。
+
+## クイックスタート（開発者向け）
+
+ソースコードから直接動かしたい場合は、Node.jsが必要です（Electron 43系が動作するバージョン）。
 
 ```bash
 npm install
@@ -114,6 +120,17 @@ renderer/statsView.mjs        移動統計ビューの描画
 renderer/aggregate.mjs        集計・フィルタ・クラスタリング後処理ロジック（DOM非依存）
 renderer/app.mjs              画面遷移・状態管理・イベント配線
 ```
+
+## 配布用パッケージのビルド
+
+`electron-builder`でWindows向けの配布物（NSISインストーラ・ポータブル版exe）を作成できます。
+
+```bash
+npm install
+npm run dist
+```
+
+`dist/`フォルダに`PathBrowser Setup <version>.exe`（インストーラ）と`PathBrowser <version>.exe`（ポータブル版）が生成されます。両方ともコード署名をしていないため、配布先のPCで初回起動時にSmartScreenの警告が出ます。署名証明書を取得すればこの警告は解消できますが、個人利用や小規模な配布の範囲では必須ではありません。
 
 ## 動作確認
 
