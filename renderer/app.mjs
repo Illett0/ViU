@@ -306,6 +306,13 @@ async function startPhotoScan(folder) {
   el.photoScanSummary.textContent = 'スキャン中...';
 
   const unsubscribe = window.pathBrowser.onPhotoScanProgress((payload) => {
+    if (payload.phase === 'listing') {
+      // Total is unknown until the recursive folder walk finishes, so there's
+      // no meaningful percentage yet — just show how many photos were found.
+      el.photoScanProgressFill.style.width = '0%';
+      el.photoScanSummary.textContent = `フォルダを検索中... (${payload.current}件のファイルを検出)`;
+      return;
+    }
     const pct = payload.total > 0 ? Math.round((payload.current / payload.total) * 100) : 0;
     el.photoScanProgressFill.style.width = pct + '%';
     el.photoScanSummary.textContent = `スキャン中... (${payload.current}/${payload.total})`;
@@ -1642,4 +1649,18 @@ window.__pathBrowserTest = {
   getMapZoom() {
     return map ? { zoom: map.getZoom(), center: map.getCenter(), context: lastMapContext } : null;
   },
+  // Bypasses the actual folder-scan flow (real GPS-tagged photo files aren't
+  // available in a test/CI context) so the photo-layer rendering path itself
+  // can still be exercised end-to-end.
+  setPhotos(photos) {
+    state.photos = photos || [];
+    render();
+  },
+  getPhotoMarkerCount() {
+    return {
+      map: photoLayerRef.markersByPath ? photoLayerRef.markersByPath.size : 0,
+      route: routePhotoLayerRef.markersByPath ? routePhotoLayerRef.markersByPath.size : 0,
+    };
+  },
+  togglePhotoLayer,
 };

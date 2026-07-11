@@ -51,6 +51,42 @@ export function clearPhotoLayer(map, layerRef) {
     map.removeLayer(layerRef.layer);
     layerRef.layer = null;
   }
+  layerRef.markersByPath = null;
+}
+
+function createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox } = {}) {
+  const marker = L.circleMarker([photo.lat, photo.lng], {
+    radius: 7,
+    color: PHOTO_MARKER_BORDER,
+    weight: 2,
+    fillColor: PHOTO_MARKER_COLOR,
+    fillOpacity: 0.9,
+    pane: PHOTO_MARKER_PANE,
+  });
+
+  const placeName = resolvePlaceName ? resolvePlaceName(photo.lat, photo.lng) : null;
+  marker.bindPopup(popupHtml(photo, placeName), { maxWidth: 260 });
+
+  // Thumbnail is fetched on demand (only when this specific photo's popup
+  // is actually opened), not eagerly for every photo — see main.js's
+  // photos:get-thumbnail handler. Keeps toggling the layer on cheap even
+  // with thousands of photos.
+  marker.on('popupopen', async () => {
+    const popupEl = marker.getPopup().getElement();
+    const thumbWrap = popupEl && popupEl.querySelector('.photo-popup-thumb-wrap');
+    if (!thumbWrap) return;
+    const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
+    if (result && result.dataUrl) {
+      thumbWrap.innerHTML = `<img class="photo-popup-thumb" src="${result.dataUrl}" alt="" />`;
+      thumbWrap.querySelector('img').addEventListener('click', () => {
+        if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
+      });
+    } else {
+      thumbWrap.innerHTML = '<div class="photo-popup-unsupported">プレビュー非対応の形式です（HEIC等）</div>';
+    }
+  });
+
+  return marker;
 }
 
 // `photos` — array of {filePath, lat, lng, takenAtMs, takenAtIsFallback,
@@ -60,59 +96,51 @@ export function clearPhotoLayer(map, layerRef) {
 // name string or null (reuses the app's already-loaded muni GeoJSON, no IPC).
 // `options.onOpenLightbox(dataUrl, photo)` — called when a thumbnail is
 // clicked inside its popup.
+//
+// This is called on every render() (navigation, filter changes, etc.) while
+// the photo layer is toggled on, but `photos` is frequently identical to the
+// previous call — so rather than tearing the whole cluster down and rebuilding
+// it every time, `layerRef` keeps the cluster group + a filePath->marker map
+// alive across calls and this only adds/removes the markers that actually
+// entered or left the visible set (diffed by filePath).
 export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOpenLightbox } = {}) {
-  clearPhotoLayer(map, layerRef);
-  if (!photos || photos.length === 0) return;
-
-  ensurePhotoPane(map);
-
-  const cluster = L.markerClusterGroup({
-    maxClusterRadius: 50,
-    spiderfyOnMaxZoom: true,
-    clusterPane: PHOTO_MARKER_PANE,
-    iconCreateFunction: (c) =>
-      L.divIcon({
-        html: `<div><span>${c.getChildCount()}</span></div>`,
-        className: 'photo-marker-cluster',
-        iconSize: L.point(36, 36),
-      }),
-  });
-
-  for (const photo of photos) {
-    const marker = L.circleMarker([photo.lat, photo.lng], {
-      radius: 7,
-      color: PHOTO_MARKER_BORDER,
-      weight: 2,
-      fillColor: PHOTO_MARKER_COLOR,
-      fillOpacity: 0.9,
-      pane: PHOTO_MARKER_PANE,
-    });
-
-    const placeName = resolvePlaceName ? resolvePlaceName(photo.lat, photo.lng) : null;
-    marker.bindPopup(popupHtml(photo, placeName), { maxWidth: 260 });
-
-    // Thumbnail is fetched on demand (only when this specific photo's popup
-    // is actually opened), not eagerly for every photo — see main.js's
-    // photos:get-thumbnail handler. Keeps toggling the layer on cheap even
-    // with thousands of photos.
-    marker.on('popupopen', async () => {
-      const popupEl = marker.getPopup().getElement();
-      const thumbWrap = popupEl && popupEl.querySelector('.photo-popup-thumb-wrap');
-      if (!thumbWrap) return;
-      const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
-      if (result && result.dataUrl) {
-        thumbWrap.innerHTML = `<img class="photo-popup-thumb" src="${result.dataUrl}" alt="" />`;
-        thumbWrap.querySelector('img').addEventListener('click', () => {
-          if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
-        });
-      } else {
-        thumbWrap.innerHTML = '<div class="photo-popup-unsupported">プレビュー非対応の形式です（HEIC等）</div>';
-      }
-    });
-
-    cluster.addLayer(marker);
+  if (!photos || photos.length === 0) {
+    clearPhotoLayer(map, layerRef);
+    return;
   }
 
-  cluster.addTo(map);
-  layerRef.layer = cluster;
+  if (!layerRef.layer) {
+    ensurePhotoPane(map);
+    layerRef.layer = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      clusterPane: PHOTO_MARKER_PANE,
+      iconCreateFunction: (c) =>
+        L.divIcon({
+          html: `<div><span>${c.getChildCount()}</span></div>`,
+          className: 'photo-marker-cluster',
+          iconSize: L.point(36, 36),
+        }),
+    });
+    layerRef.markersByPath = new Map();
+    layerRef.layer.addTo(map);
+  }
+
+  const cluster = layerRef.layer;
+  const markersByPath = layerRef.markersByPath;
+  const nextPaths = new Set();
+
+  for (const photo of photos) {
+    nextPaths.add(photo.filePath);
+    if (markersByPath.has(photo.filePath)) continue; // Unchanged since last render — leave its marker (and any open popup) alone.
+    const marker = createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox });
+    cluster.addLayer(marker);
+    markersByPath.set(photo.filePath, marker);
+  }
+
+  for (const [filePath, marker] of markersByPath) {
+    if (nextPaths.has(filePath)) continue;
+    cluster.removeLayer(marker);
+    markersByPath.delete(filePath);
+  }
 }
