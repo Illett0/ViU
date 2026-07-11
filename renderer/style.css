@@ -858,6 +858,15 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   color: #101216;
 }
 
+.settings-version {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text-dim);
+  text-align: right;
+}
+
 .settings-photo-section {
   margin-top: 20px;
   padding-top: 16px;

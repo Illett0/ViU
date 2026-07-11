@@ -122,6 +122,7 @@ const el = {
   zoneHiddenCount: document.getElementById('zone-hidden-count'),
   btnClearCache: document.getElementById('btn-clear-cache'),
   cacheClearResult: document.getElementById('cache-clear-result'),
+  settingsVersion: document.getElementById('settings-version'),
   dayViewOverlay: document.getElementById('day-view-overlay'),
   dayViewTitle: document.getElementById('day-view-title'),
   dayViewMapDiv: document.getElementById('day-view-map'),
@@ -179,6 +180,10 @@ function resetLabelQueue() {
 
 const zonesReady = window.pathBrowser.getZones().then((zones) => {
   state.zones = zones || [];
+});
+
+window.pathBrowser.getAppVersion().then((version) => {
+  el.settingsVersion.textContent = `PathBrowser v${version}`;
 });
 
 // ---------- Recent files (welcome screen) ----------
