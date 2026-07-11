@@ -1481,9 +1481,9 @@ el.btnClearCache.addEventListener('click', async () => {
   if (!proceed) return;
   el.btnClearCache.disabled = true;
   try {
-    const { geoCount, nominatimCount } = await window.pathBrowser.clearCache();
+    const { geoCount, nominatimCount, thumbnailCount } = await window.pathBrowser.clearCache();
     el.cacheClearResult.hidden = false;
-    el.cacheClearResult.textContent = `キャッシュをクリアしました（判定結果 ${geoCount}件、地名 ${nominatimCount}件）。`;
+    el.cacheClearResult.textContent = `キャッシュをクリアしました（判定結果 ${geoCount}件、地名 ${nominatimCount}件、サムネイル ${thumbnailCount}件）。`;
   } finally {
     el.btnClearCache.disabled = false;
   }

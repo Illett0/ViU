@@ -9,6 +9,7 @@ const exclusionZones = require('./lib/exclusionZones');
 const recentFiles = require('./lib/recentFiles');
 const geoCache = require('./lib/geoCache');
 const photoCache = require('./lib/photoCache');
+const thumbnailCache = require('./lib/thumbnailCache');
 
 let mainWindow;
 let prefectureGeoJSONCache = null;
@@ -146,16 +147,18 @@ ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) 
 });
 
 // Clears the on-disk performance caches (municipality/clustering results,
-// Nominatim reverse-geocode labels, scanned photo metadata). Does NOT touch
-// recent-files history, backups, exclusion zones, or the linked photo
-// folder itself — those are user data/settings, not caches, and this button
-// is scoped to "make PathBrowser recompute from scratch" only.
+// Nominatim reverse-geocode labels, scanned photo metadata, generated
+// thumbnails). Does NOT touch recent-files history, backups, exclusion
+// zones, or the linked photo folder itself — those are user data/settings,
+// not caches, and this button is scoped to "make PathBrowser recompute from
+// scratch" only.
 ipcMain.handle('cache:clear', async () => {
   const userDataPath = app.getPath('userData');
   const geoCount = geoCache.clearCache(userDataPath);
   const nominatimCount = nominatim.clearCache(userDataPath);
   const photoCount = photoCache.clearEntries(userDataPath);
-  return { geoCount, nominatimCount, photoCount };
+  const thumbnailCount = thumbnailCache.clearCache(userDataPath);
+  return { geoCount, nominatimCount, photoCount, thumbnailCount };
 });
 
 ipcMain.handle('photos:choose-folder', async () => {
@@ -196,9 +199,7 @@ ipcMain.handle('photos:scan-folder', async (event, folder) => {
 
 // Returns a base64 data: URL for on-demand display in a popup/lightbox
 // (fits the existing CSP's `img-src ... data:` allowance without needing a
-// custom protocol handler). HEIC isn't returned as image data — Chromium
-// can't render it in an <img> regardless of encoding — the renderer shows a
-// placeholder instead.
+// custom protocol handler).
 //
 // Resized via Electron's built-in `nativeImage` (no extra native dependency,
 // so packaging/electron-builder is unaffected) rather than sending the
@@ -210,13 +211,64 @@ ipcMain.handle('photos:scan-folder', async (event, folder) => {
 // anyway). THUMBNAIL_MAX_DIMENSION is sized for the lightbox (the larger of
 // the two consumers — see photoView.mjs, which reuses this same result for
 // both), not just the small popup preview.
+//
+// HEIC can't go through nativeImage (Chromium has no HEVC decoder) — it's
+// decoded to raw pixels by worker/thumbnailWorker.js (libheif wasm) and only
+// the resize/JPEG-encode happens here. That decode costs ~1s of CPU per
+// photo, which is what makes the disk cache below matter most.
 const THUMBNAIL_MAX_DIMENSION = 1600;
 const THUMBNAIL_JPEG_QUALITY = 78;
+// Baked into each cache entry's key, so changing the constants above (or
+// bumping the version on any other generation-output change) makes old
+// cached thumbnails miss instead of being served stale.
+const THUMBNAIL_CACHE_PARAMS = `v1|${THUMBNAIL_MAX_DIMENSION}|${THUMBNAIL_JPEG_QUALITY}`;
+
+// Lazily-spawned persistent HEIC decode worker (see worker/thumbnailWorker.js
+// for why it's a worker and why it's long-lived). Replies are matched back to
+// callers by id since several decodes can be requested at once (gallery).
+let thumbWorker = null;
+let thumbWorkerSeq = 0;
+const thumbWorkerPending = new Map();
+
+function decodeHeicInWorker(filePath) {
+  if (!thumbWorker) {
+    thumbWorker = new Worker(path.join(__dirname, 'worker', 'thumbnailWorker.js'));
+    thumbWorker.on('message', (msg) => {
+      const pending = thumbWorkerPending.get(msg.id);
+      if (!pending) return;
+      thumbWorkerPending.delete(msg.id);
+      if (msg.ok) pending.resolve(msg);
+      else pending.reject(new Error(msg.message));
+    });
+    // Worker died (OOM on a pathological file, etc.) — fail everything in
+    // flight and let the next request spawn a fresh worker.
+    thumbWorker.on('error', (err) => {
+      for (const pending of thumbWorkerPending.values()) pending.reject(err);
+      thumbWorkerPending.clear();
+      thumbWorker = null;
+    });
+  }
+  const id = ++thumbWorkerSeq;
+  return new Promise((resolve, reject) => {
+    thumbWorkerPending.set(id, { resolve, reject });
+    thumbWorker.postMessage({ id, filePath });
+  });
+}
+
 ipcMain.handle('photos:get-thumbnail', async (event, filePath) => {
+  const userDataPath = app.getPath('userData');
+  const cached = thumbnailCache.read(userDataPath, filePath, THUMBNAIL_CACHE_PARAMS);
+  if (cached) return { dataUrl: `data:image/jpeg;base64,${cached.toString('base64')}` };
+
   const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.heic') return { unsupported: true };
   try {
-    let img = nativeImage.createFromPath(filePath);
+    let img;
+    if (ext === '.heic') {
+      const { width, height, pixels } = await decodeHeicInWorker(filePath);
+      img = nativeImage.createFromBitmap(Buffer.from(pixels), { width, height });
+    } else {
+      img = nativeImage.createFromPath(filePath);
+    }
     if (img.isEmpty()) return { unsupported: true };
     const { width, height } = img.getSize();
     const longSide = Math.max(width, height);
@@ -225,6 +277,7 @@ ipcMain.handle('photos:get-thumbnail', async (event, filePath) => {
       img = img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'good' });
     }
     const buf = img.toJPEG(THUMBNAIL_JPEG_QUALITY);
+    thumbnailCache.write(userDataPath, filePath, THUMBNAIL_CACHE_PARAMS, buf);
     return { dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` };
   } catch {
     return { unsupported: true };
