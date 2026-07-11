@@ -27,14 +27,26 @@ const photoCache = require('../lib/photoCache');
 
 const PHOTO_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.heic']);
 const PROGRESS_INTERVAL = 25; // report every N files, not every single one
+const LISTING_PROGRESS_INTERVAL = 200; // report every N files found while listing
 
 function report(current, total) {
   parentPort.postMessage({ type: 'progress', phase: 'scanning', current, total });
 }
 
+// `total` is unknown while listing is still in progress (we don't know how
+// many photo files exist until the recursive walk finishes), so it's
+// reported as 0 — the renderer's phase-aware handler treats phase:'listing'
+// as indeterminate rather than trying to compute a percentage from it.
+function reportListing(current) {
+  parentPort.postMessage({ type: 'progress', phase: 'listing', current, total: 0 });
+}
+
 // Recursively collects every photo file path under `dir`. Symlinks are not
 // followed (readdirSync default), which also sidesteps any risk of an
-// accidental symlink loop.
+// accidental symlink loop. This walk is synchronous and can take a while on
+// folders with tens of thousands of files, so it reports its own progress
+// (count of photos found so far) rather than leaving the UI looking frozen
+// until the walk completes.
 function collectPhotoFiles(dir, out) {
   let entries;
   try {
@@ -48,6 +60,7 @@ function collectPhotoFiles(dir, out) {
       collectPhotoFiles(full, out);
     } else if (entry.isFile() && PHOTO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       out.push(full);
+      if (out.length % LISTING_PROGRESS_INTERVAL === 0) reportListing(out.length);
     }
   }
 }
@@ -178,6 +191,7 @@ async function run() {
   const { folder, userDataPath } = workerData;
 
   const files = [];
+  reportListing(0);
   collectPhotoFiles(folder, files);
 
   const existingEntries = photoCache.getEntries(userDataPath);
