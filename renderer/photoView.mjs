@@ -46,6 +46,57 @@ function popupHtml(photo, placeName) {
     </div>`;
 }
 
+// Matches the 4-column grid in style.css (.photo-cluster-popup-grid): 4
+// thumbs at ~96px each + gaps. Sized to stay comfortably inside the map
+// even on a smallish window (Leaflet auto-pans the popup into view).
+const GALLERY_POPUP_WIDTH = 408;
+
+function galleryHtml(count) {
+  const thumbs = Array.from(
+    { length: count },
+    (_, i) => `<div class="photo-cluster-popup-thumb-wrap" data-index="${i}"><span class="photo-popup-loading">…</span></div>`
+  ).join('');
+  return `
+    <div class="photo-cluster-popup">
+      <div class="photo-cluster-popup-count">${count}枚の写真</div>
+      <div class="photo-cluster-popup-grid">${thumbs}</div>
+    </div>`;
+}
+
+// Opens a Leaflet popup at `latlng` showing every photo in a cluster as a
+// thumbnail grid, instead of forcing the user to spiderfy-then-click each
+// pin individually — the default leaflet.markercluster behavior becomes
+// unusable once several photos share (near-)identical coordinates (e.g.
+// burst shots), since spiderfied pins at max zoom end up stacked and tiny.
+function openClusterGallery(map, latlng, photos, { onOpenLightbox } = {}) {
+  if (!photos || photos.length === 0) return;
+
+  // minWidth is what actually sizes the popup: the grid's 1fr columns and
+  // width:100% thumbnails never push the content wider on their own, so
+  // without it the popup collapses to its minimum and the thumbnails end up
+  // tiny (issue #17).
+  const popup = L.popup({ minWidth: GALLERY_POPUP_WIDTH, maxWidth: GALLERY_POPUP_WIDTH })
+    .setLatLng(latlng)
+    .setContent(galleryHtml(photos.length))
+    .openOn(map);
+
+  const popupEl = popup.getElement();
+  if (!popupEl) return;
+  photos.forEach(async (photo, i) => {
+    const wrap = popupEl.querySelector(`.photo-cluster-popup-thumb-wrap[data-index="${i}"]`);
+    if (!wrap) return;
+    const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
+    if (result && result.dataUrl) {
+      wrap.innerHTML = `<img src="${result.dataUrl}" alt="" />`;
+      wrap.addEventListener('click', () => {
+        if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
+      });
+    } else {
+      wrap.innerHTML = '<span class="photo-popup-unsupported">非対応</span>';
+    }
+  });
+}
+
 export function clearPhotoLayer(map, layerRef) {
   if (layerRef.layer) {
     map.removeLayer(layerRef.layer);
@@ -63,6 +114,8 @@ function createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox } = {}) {
     fillOpacity: 0.9,
     pane: PHOTO_MARKER_PANE,
   });
+
+  marker.photo = photo; // Read back by the cluster's 'clusterclick' gallery handler below.
 
   const placeName = resolvePlaceName ? resolvePlaceName(photo.lat, photo.lng) : null;
   marker.bindPopup(popupHtml(photo, placeName), { maxWidth: 260 });
@@ -82,7 +135,7 @@ function createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox } = {}) {
         if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
       });
     } else {
-      thumbWrap.innerHTML = '<div class="photo-popup-unsupported">プレビュー非対応の形式です（HEIC等）</div>';
+      thumbWrap.innerHTML = '<div class="photo-popup-unsupported">プレビューを生成できませんでした</div>';
     }
   });
 
@@ -113,7 +166,12 @@ export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOp
     ensurePhotoPane(map);
     layerRef.layer = L.markerClusterGroup({
       maxClusterRadius: 50,
-      spiderfyOnMaxZoom: true,
+      // Both defaults are replaced by the manual 'clusterclick' handler below
+      // (zoom-to-bounds while there's still room to zoom in, gallery popup
+      // once there isn't) — spiderfying tiny/identical-coordinate clusters
+      // into a cramped fan of pins was hard to click accurately.
+      spiderfyOnMaxZoom: false,
+      zoomToBoundsOnClick: false,
       clusterPane: PHOTO_MARKER_PANE,
       iconCreateFunction: (c) =>
         L.divIcon({
@@ -121,6 +179,14 @@ export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOp
           className: 'photo-marker-cluster',
           iconSize: L.point(36, 36),
         }),
+    });
+    layerRef.layer.on('clusterclick', (e) => {
+      if (map.getZoom() < map.getMaxZoom()) {
+        map.fitBounds(e.layer.getBounds().pad(0.5));
+        return;
+      }
+      const photos = e.layer.getAllChildMarkers().map((m) => m.photo).filter(Boolean);
+      openClusterGallery(map, e.layer.getLatLng(), photos, { onOpenLightbox });
     });
     layerRef.markersByPath = new Map();
     layerRef.layer.addTo(map);

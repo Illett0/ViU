@@ -936,6 +936,41 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
 .photo-popup-place { color: var(--color-text-dim); margin-bottom: 2px; }
 .photo-popup-source { color: var(--color-text-dim); font-size: 11px; }
 
+/* Cluster click at max zoom opens this instead of spiderfying — a grid of
+   thumbnails for every photo in the cluster, so near-identical-coordinate
+   photos (e.g. burst shots) don't force clicking a cramped fan of pins. */
+/* Width itself comes from the L.popup minWidth in photoView.mjs
+   (GALLERY_POPUP_WIDTH) — 1fr columns never push the popup wider on their
+   own. Keep the two in sync when resizing. */
+.photo-cluster-popup-count { font-size: 12px; color: var(--color-text-dim); margin-bottom: 6px; }
+.photo-cluster-popup-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.photo-cluster-popup-thumb-wrap {
+  aspect-ratio: 1;
+  background: #10131a;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-in;
+}
+/* contain, not cover — most phone photos are 4:3/16:9, not square, and
+   cropping to fill the square box was cutting off a visible chunk of every
+   photo (sky, subjects at the frame edge). Letterboxed against the wrap's
+   dark background instead (issue #17 follow-up). */
+.photo-cluster-popup-thumb-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.photo-cluster-popup-thumb-wrap .photo-popup-loading,
+.photo-cluster-popup-thumb-wrap .photo-popup-unsupported {
+  padding: 0;
+  font-size: 10px;
+}
+
 .photo-lightbox-overlay {
   position: fixed;
   inset: 0;
