@@ -199,6 +199,7 @@ async function run() {
   const entries = {};
   let withLocationExif = 0;
   let withLocationTakeout = 0;
+  let freshScans = 0;
 
   for (let i = 0; i < files.length; i++) {
     const filePath = files[i];
@@ -218,6 +219,7 @@ async function run() {
     } else {
       const scanned = await scanOne(filePath, dirFilesCache);
       entry = { mtime: stat.mtimeMs, ...scanned };
+      freshScans++;
     }
 
     entries[filePath] = entry;
@@ -227,8 +229,12 @@ async function run() {
 
   report(files.length, files.length);
 
-  photoCache.saveEntries(userDataPath, entries);
-  photoCache.setLinkedFolder(userDataPath, folder);
+  // With zero fresh scans every entry was reused from the old cache, so the
+  // key set can only have shrunk (a new/changed file always counts as a
+  // fresh scan) — equal counts therefore mean the manifest is byte-for-byte
+  // identical and the multi-MB rewrite can be skipped.
+  const entriesChanged = freshScans > 0 || Object.keys(entries).length !== Object.keys(existingEntries).length;
+  photoCache.saveScanResult(userDataPath, folder, entries, { entriesChanged });
 
   const photos = Object.entries(entries).map(([filePath, e]) => ({ filePath, ...e }));
 
