@@ -1649,4 +1649,18 @@ window.__pathBrowserTest = {
   getMapZoom() {
     return map ? { zoom: map.getZoom(), center: map.getCenter(), context: lastMapContext } : null;
   },
+  // Bypasses the actual folder-scan flow (real GPS-tagged photo files aren't
+  // available in a test/CI context) so the photo-layer rendering path itself
+  // can still be exercised end-to-end.
+  setPhotos(photos) {
+    state.photos = photos || [];
+    render();
+  },
+  getPhotoMarkerCount() {
+    return {
+      map: photoLayerRef.markersByPath ? photoLayerRef.markersByPath.size : 0,
+      route: routePhotoLayerRef.markersByPath ? routePhotoLayerRef.markersByPath.size : 0,
+    };
+  },
+  togglePhotoLayer,
 };
