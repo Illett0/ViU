@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('pathBrowser', {
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   chooseFile: () => ipcRenderer.invoke('timeline:choose-file'),
   parseFile: (filePath) => ipcRenderer.invoke('timeline:parse-file', filePath),
   getPrefectureGeoJSON: () => ipcRenderer.invoke('timeline:get-prefecture-geojson'),

@@ -42,6 +42,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+ipcMain.handle('app:get-version', async () => {
+  return app.getVersion();
+});
+
 ipcMain.handle('timeline:get-prefecture-geojson', async () => {
   if (!prefectureGeoJSONCache) {
     const raw = fs.readFileSync(path.join(__dirname, 'data', 'prefectures.geojson'), 'utf-8');

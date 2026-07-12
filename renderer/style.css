@@ -858,6 +858,15 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   color: #101216;
 }
 
+.settings-version {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text-dim);
+  text-align: right;
+}
+
 .settings-photo-section {
   margin-top: 20px;
   padding-top: 16px;
@@ -935,6 +944,13 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
 .photo-popup-date { color: var(--color-text); margin-bottom: 2px; }
 .photo-popup-place { color: var(--color-text-dim); margin-bottom: 2px; }
 .photo-popup-source { color: var(--color-text-dim); font-size: 11px; }
+/* Stage3 (issue #1): photos placed via timeline-based estimation, not real
+   Exif/Takeout GPS — flagged so it never reads as confirmed fact. */
+.photo-popup-estimated-notice {
+  color: #e3a12c;
+  font-size: 11px;
+  margin-top: 4px;
+}
 
 /* Cluster click at max zoom opens this instead of spiderfying — a grid of
    thumbnails for every photo in the cluster, so near-identical-coordinate
@@ -959,7 +975,11 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   align-items: center;
   justify-content: center;
   cursor: zoom-in;
+  position: relative;
 }
+/* Stage3 (issue #1): dashed outline mirrors the map pin's dashed border, so
+   the "this location is a guess" cue is consistent across both surfaces. */
+.photo-cluster-popup-thumb-wrap--estimated { outline: 2px dashed #e3a12c; outline-offset: -2px; }
 /* contain, not cover — most phone photos are 4:3/16:9, not square, and
    cropping to fill the square box was cutting off a visible chunk of every
    photo (sky, subjects at the frame edge). Letterboxed against the wrap's
