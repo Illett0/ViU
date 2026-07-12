@@ -40,6 +40,7 @@ import {
   computeTopDays,
   computeNewlyVisitedInYear,
   computeChronology,
+  estimatePhotoLocations,
 } from './aggregate.mjs';
 
 const state = createState();
@@ -57,7 +58,8 @@ state.timelapse = { playing: false, timer: null, steps: [], index: -1 };
 // existing disk cache in lib/nominatim.js (keyed by placeId/coords), so this
 // is purely a renderer-side memo to avoid redundant IPC round-trips.
 state.placeLabelCache = new Map(); // clusterId -> { status: 'pending'|'done'|'error', label }
-state.photos = []; // scanned photos with a location ({filePath, lat, lng, takenAtMs, takenAtIsFallback, source})
+state.rawPhotos = []; // every scanned photo, located or not ({filePath, lat, lng, hasLocation, takenAtMs, takenAtIsFallback, source})
+state.photos = []; // state.rawPhotos with Stage3 timeline-based estimates applied (see applyPhotoEstimates), filtered to hasLocation
 state.photoLayerVisible = false;
 state.linkedPhotoFolder = null;
 
@@ -281,7 +283,8 @@ function openPhotoLightbox(dataUrl, photo) {
   el.photoLightboxImg.src = dataUrl;
   const name = photo.filePath.split(/[\\/]/).pop();
   const place = resolvePlaceName(photo.lat, photo.lng);
-  el.photoLightboxCaption.textContent = [name, place].filter(Boolean).join(' — ');
+  const estimatedTag = photo.source === 'estimated' ? '（位置は推定）' : null;
+  el.photoLightboxCaption.textContent = [name, place, estimatedTag].filter(Boolean).join(' — ');
   el.photoLightboxOverlay.hidden = false;
 }
 
@@ -298,9 +301,23 @@ function togglePhotoLayer() {
   render();
 }
 
-function formatPhotoScanSummary(summary) {
+function formatPhotoScanSummary(summary, estimatedCount) {
   if (!summary) return '';
-  return `${summary.total}枚中 ${summary.withLocation}枚に位置情報が見つかりました（Exif ${summary.withLocationExif} / Takeout ${summary.withLocationTakeout}）`;
+  const base = `${summary.total}枚中 ${summary.withLocation}枚に位置情報が見つかりました（Exif ${summary.withLocationExif} / Takeout ${summary.withLocationTakeout}）`;
+  return estimatedCount > 0 ? `${base}。さらに${estimatedCount}枚をタイムラインの記録から推定しました` : base;
+}
+
+// Stage3: (re-)derives state.photos from state.rawPhotos, filling in a
+// timeline-estimated location for any photo that has neither Exif nor
+// Takeout GPS (see estimatePhotoLocations in aggregate.mjs). Called both
+// after a photo scan completes and after a timeline file finishes loading,
+// since either can happen first — a previously-scanned folder is re-applied
+// against a newly-loaded timeline (initPhotoLink runs before any file is
+// open), and a freshly-scanned folder is applied against an already-loaded
+// timeline.
+function applyPhotoEstimates() {
+  const withEstimates = state.raw ? estimatePhotoLocations(state.raw, state.rawPhotos) : state.rawPhotos;
+  state.photos = withEstimates.filter((p) => p.hasLocation);
 }
 
 async function startPhotoScan(folder) {
@@ -326,9 +343,11 @@ async function startPhotoScan(folder) {
   try {
     const result = await window.pathBrowser.scanPhotoFolder(folder);
     state.linkedPhotoFolder = folder;
-    state.photos = (result.photos || []).filter((p) => p.hasLocation);
+    state.rawPhotos = result.photos || [];
+    applyPhotoEstimates();
+    const estimatedCount = state.photos.filter((p) => p.source === 'estimated').length;
     el.photoLinkedFolder.textContent = folder;
-    el.photoScanSummary.textContent = formatPhotoScanSummary(result.summary);
+    el.photoScanSummary.textContent = formatPhotoScanSummary(result.summary, estimatedCount);
     el.btnRescanPhotoFolder.hidden = false;
   } catch (err) {
     el.photoScanSummary.textContent = `スキャンに失敗しました: ${err && err.message ? err.message : err}`;
@@ -407,6 +426,7 @@ async function openFile(explicitPath) {
     state.muniGeoJSON = muniGeoJSON;
     state.municipalityByCode = buildMunicipalityIndex(result.municipalities);
     state.clusterThreshold = 50;
+    applyPhotoEstimates(); // a folder linked before this file was open may now gain Stage3 estimates
     state.history = [{ view: 'national', params: {} }];
     state.historyIndex = 0;
     state.filter = { year: null, month: null };

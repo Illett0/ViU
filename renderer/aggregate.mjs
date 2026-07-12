@@ -4,6 +4,7 @@
 const PRIVACY_RADIUS_METERS = 1000;
 const TOKAIDO_53_KM = 490;
 const MAX_DWELL_MS = 24 * 60 * 60 * 1000;
+const MAX_ESTIMATION_GAP_MS = 2 * 60 * 60 * 1000; // 2h — see estimatePhotoLocations
 
 function distanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -534,10 +535,105 @@ function computeChronology(data, prefAggregates, muniAggregates, municipalityByC
   return events.sort((a, b) => a.epoch - b.epoch);
 }
 
+// Binary-search `sortedVisits` (ascending by startEpoch, endEpoch required)
+// for one whose [startEpoch, endEpoch] contains `epoch` — i.e. the person was
+// stationary at that visit's location at that exact moment. Mirrors
+// worker/parseWorker.js's findContainingActivity, applied to visits instead.
+function findContainingVisit(sortedVisits, epoch) {
+  if (sortedVisits.length === 0 || epoch == null) return null;
+  let lo = 0;
+  let hi = sortedVisits.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (sortedVisits[mid].startEpoch <= epoch) lo = mid;
+    else hi = mid - 1;
+  }
+  const v = sortedVisits[lo];
+  return v && v.startEpoch <= epoch && v.endEpoch >= epoch ? v : null;
+}
+
+// Binary-search `sortedSamples` (ascending by epoch) for whichever sample is
+// closest in time to `epoch`, checking both neighbors around the insertion
+// point (the nearer one isn't necessarily the last one <= epoch).
+function findNearestSample(sortedSamples, epoch) {
+  if (sortedSamples.length === 0 || epoch == null) return null;
+  let lo = 0;
+  let hi = sortedSamples.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sortedSamples[mid].epoch < epoch) lo = mid + 1;
+    else hi = mid;
+  }
+  let best = sortedSamples[lo];
+  let bestGap = Math.abs(best.epoch - epoch);
+  if (lo > 0) {
+    const prevGap = Math.abs(sortedSamples[lo - 1].epoch - epoch);
+    if (prevGap < bestGap) {
+      best = sortedSamples[lo - 1];
+      bestGap = prevGap;
+    }
+  }
+  return { lat: best.lat, lng: best.lng, gapMs: bestGap };
+}
+
+// Stage 3: for photos with no Exif/Takeout GPS, estimate a location by
+// cross-referencing the photo's taken-at timestamp against the timeline's
+// own movement record. Two tiers, strongest signal first:
+//   1. The photo was taken during a `visit` (stationary at one place for a
+//      known [startEpoch, endEpoch] span) — use that visit's coordinates
+//      exactly, no time gap.
+//   2. Otherwise, fall back to the nearest timestamped location sample
+//      (timelinePath points, plus activity start/end points for the gaps
+//      timelinePath doesn't cover) within `maxGapMs` of the photo. Beyond
+//      that gap the estimate would be guessing, so the photo is left
+//      without a location, same as before this feature existed.
+// Estimated photos are tagged `source: 'estimated'` (vs. 'exif'/'takeout')
+// and carry `estimationGapMs` so the UI can show how rough the guess is —
+// they must stay visually distinguishable from real GPS data, never silently
+// presented as fact.
+function estimatePhotoLocations(data, photos, { maxGapMs = MAX_ESTIMATION_GAP_MS } = {}) {
+  if (!data || !photos.some((p) => !p.hasLocation)) return photos;
+
+  const sortedVisits = data.visits
+    .filter((v) => v.startEpoch != null && v.endEpoch != null)
+    .sort((a, b) => a.startEpoch - b.startEpoch);
+
+  const samples = [];
+  for (const p of data.pathPoints) {
+    if (p[2] != null) samples.push({ epoch: p[2], lat: p[0], lng: p[1] });
+  }
+  for (const a of data.activities) {
+    if (a.startEpoch != null && a.startLat != null) samples.push({ epoch: a.startEpoch, lat: a.startLat, lng: a.startLng });
+    if (a.endEpoch != null && a.endLat != null) samples.push({ epoch: a.endEpoch, lat: a.endLat, lng: a.endLng });
+  }
+  for (const v of sortedVisits) {
+    samples.push({ epoch: v.startEpoch, lat: v.lat, lng: v.lng });
+  }
+  samples.sort((a, b) => a.epoch - b.epoch);
+
+  return photos.map((photo) => {
+    if (photo.hasLocation || photo.takenAtMs == null) return photo;
+
+    const visit = findContainingVisit(sortedVisits, photo.takenAtMs);
+    if (visit) {
+      return { ...photo, lat: visit.lat, lng: visit.lng, hasLocation: true, source: 'estimated', estimationGapMs: 0 };
+    }
+
+    const nearest = findNearestSample(samples, photo.takenAtMs);
+    if (nearest && nearest.gapMs <= maxGapMs) {
+      return { ...photo, lat: nearest.lat, lng: nearest.lng, hasLocation: true, source: 'estimated', estimationGapMs: nearest.gapMs };
+    }
+
+    return photo;
+  });
+}
+
 export {
   PRIVACY_RADIUS_METERS,
   TOKAIDO_53_KM,
   MAX_DWELL_MS,
+  MAX_ESTIMATION_GAP_MS,
+  estimatePhotoLocations,
   distanceMeters,
   applyPrivacy,
   isInAnyZone,

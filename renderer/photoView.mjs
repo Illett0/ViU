@@ -9,6 +9,11 @@
 const PHOTO_MARKER_COLOR = '#e377c2';
 const PHOTO_MARKER_BORDER = '#ffffff';
 const PHOTO_MARKER_PANE = 'photoMarkerPane';
+// Stage3 (issue #1): photos with no Exif/Takeout GPS, plotted from a
+// timeline-based guess instead — a duller fill + dashed border keeps them
+// visually distinct from real GPS pins at a glance, never presented as fact.
+const PHOTO_MARKER_ESTIMATED_FILL_OPACITY = 0.45;
+const PHOTO_MARKER_ESTIMATED_DASH = '3,3';
 
 function ensurePhotoPane(map) {
   if (!map.getPane(PHOTO_MARKER_PANE)) {
@@ -28,20 +33,34 @@ function formatTakenAt(ms, isFallback) {
   return isFallback ? `${s}（推定・ファイル作成日時）` : s;
 }
 
-function sourceLabel(source) {
-  if (source === 'exif') return '位置情報: Exif';
-  if (source === 'takeout') return '位置情報: Google Takeout';
+// `estimationGapMs` — how far the timeline sample used for the estimate was
+// from the photo's own taken-at time (0 for a same-visit match). Shown so the
+// user can judge how much to trust a given estimated pin.
+function formatEstimationGap(ms) {
+  if (ms == null || ms <= 0) return '';
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `（記録との時間差: 約${minutes}分）`;
+  const hours = Math.round(minutes / 60);
+  return `（記録との時間差: 約${hours}時間）`;
+}
+
+function sourceLabel(photo) {
+  if (photo.source === 'exif') return '位置情報: Exif';
+  if (photo.source === 'takeout') return '位置情報: Google Takeout';
+  if (photo.source === 'estimated') return `位置情報: 推定${formatEstimationGap(photo.estimationGapMs)}`;
   return '';
 }
 
 function popupHtml(photo, placeName) {
+  const estimated = photo.source === 'estimated';
   return `
     <div class="photo-popup">
       <div class="photo-popup-thumb-wrap"><span class="photo-popup-loading">読み込み中…</span></div>
       <div class="photo-popup-meta">
         <div class="photo-popup-date">${formatTakenAt(photo.takenAtMs, photo.takenAtIsFallback)}</div>
         ${placeName ? `<div class="photo-popup-place">${placeName}</div>` : ''}
-        <div class="photo-popup-source">${sourceLabel(photo.source)}</div>
+        <div class="photo-popup-source">${sourceLabel(photo)}</div>
+        ${estimated ? '<div class="photo-popup-estimated-notice">タイムラインの移動記録から推定した位置です。実際の撮影地点と異なる場合があります。</div>' : ''}
       </div>
     </div>`;
 }
@@ -51,14 +70,16 @@ function popupHtml(photo, placeName) {
 // even on a smallish window (Leaflet auto-pans the popup into view).
 const GALLERY_POPUP_WIDTH = 408;
 
-function galleryHtml(count) {
-  const thumbs = Array.from(
-    { length: count },
-    (_, i) => `<div class="photo-cluster-popup-thumb-wrap" data-index="${i}"><span class="photo-popup-loading">…</span></div>`
-  ).join('');
+function galleryHtml(photos) {
+  const thumbs = photos
+    .map(
+      (photo, i) =>
+        `<div class="photo-cluster-popup-thumb-wrap${photo.source === 'estimated' ? ' photo-cluster-popup-thumb-wrap--estimated' : ''}" data-index="${i}" title="${photo.source === 'estimated' ? '推定位置の写真' : ''}"><span class="photo-popup-loading">…</span></div>`
+    )
+    .join('');
   return `
     <div class="photo-cluster-popup">
-      <div class="photo-cluster-popup-count">${count}枚の写真</div>
+      <div class="photo-cluster-popup-count">${photos.length}枚の写真</div>
       <div class="photo-cluster-popup-grid">${thumbs}</div>
     </div>`;
 }
@@ -77,7 +98,7 @@ function openClusterGallery(map, latlng, photos, { onOpenLightbox } = {}) {
   // tiny (issue #17).
   const popup = L.popup({ minWidth: GALLERY_POPUP_WIDTH, maxWidth: GALLERY_POPUP_WIDTH })
     .setLatLng(latlng)
-    .setContent(galleryHtml(photos.length))
+    .setContent(galleryHtml(photos))
     .openOn(map);
 
   const popupEl = popup.getElement();
@@ -106,12 +127,14 @@ export function clearPhotoLayer(map, layerRef) {
 }
 
 function createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox } = {}) {
+  const estimated = photo.source === 'estimated';
   const marker = L.circleMarker([photo.lat, photo.lng], {
     radius: 7,
     color: PHOTO_MARKER_BORDER,
     weight: 2,
+    dashArray: estimated ? PHOTO_MARKER_ESTIMATED_DASH : null,
     fillColor: PHOTO_MARKER_COLOR,
-    fillOpacity: 0.9,
+    fillOpacity: estimated ? PHOTO_MARKER_ESTIMATED_FILL_OPACITY : 0.9,
     pane: PHOTO_MARKER_PANE,
   });
 
