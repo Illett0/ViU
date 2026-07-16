@@ -204,8 +204,19 @@ export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOp
         }),
     });
     layerRef.layer.on('clusterclick', (e) => {
-      if (map.getZoom() < map.getMaxZoom()) {
-        map.fitBounds(e.layer.getBounds().pad(0.5));
+      // Compare against the zoom fitBounds would actually land on for this
+      // cluster's own bounds, not the map's absolute max zoom — fitBounds
+      // jumps straight to its target zoom rather than stepping in, so a
+      // cluster whose real-world spread fits at, say, zoom 16 would
+      // otherwise re-fit to that same zoom 16 on every click forever,
+      // never reaching the map max and never opening the gallery. This hit
+      // GPS-tagged photo clusters especially hard (their pins are spread
+      // over real walking distance, unlike same-coordinate 推定/estimated
+      // pins whose zero-size bounds happened to fit-zoom straight to max).
+      const bounds = e.layer.getBounds().pad(0.5);
+      const targetZoom = map.getBoundsZoom(bounds);
+      if (targetZoom > map.getZoom()) {
+        map.fitBounds(bounds);
         return;
       }
       const photos = e.layer.getAllChildMarkers().map((m) => m.photo).filter(Boolean);
