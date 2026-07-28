@@ -185,7 +185,7 @@ const zonesReady = window.pathBrowser.getZones().then((zones) => {
 });
 
 window.pathBrowser.getAppVersion().then((version) => {
-  el.settingsVersion.textContent = `PathBrowser v${version}`;
+  el.settingsVersion.textContent = `ViU v${version}`;
 });
 
 // ---------- Recent files (welcome screen) ----------

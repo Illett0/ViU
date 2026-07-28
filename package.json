@@ -1,12 +1,12 @@
 {
-  "name": "pathbrowser",
+  "name": "viu",
   "version": "0.2.4",
   "description": "Googleタイムライン位置履歴から都道府県制覇マップ・移動統計を可視化するデスクトップアプリ",
   "main": "main.js",
   "author": "_Illett_",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Illett0/PathBrowser.git"
+    "url": "https://github.com/Illett0/ViU.git"
   },
   "scripts": {
     "start": "electron .",
@@ -29,8 +29,8 @@
     "leaflet": "^1.9.4"
   },
   "build": {
-    "appId": "dev.illett.pathbrowser",
-    "productName": "PathBrowser",
+    "appId": "dev.illett.viu",
+    "productName": "ViU",
     "directories": {
       "output": "dist"
     },
@@ -61,7 +61,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "PathBrowser",
+      "shortcutName": "ViU",
       "menuCategory": false
     }
   },
