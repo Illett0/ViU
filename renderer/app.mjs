@@ -1373,12 +1373,20 @@ function resetTimelapse() {
 
 // ---------- Settings / exclusion zones ----------
 
+// Google純正のHOME/WORKラベル（state.raw.frequentPlaces）は、Googleのタイムライン
+// エクスポート自体が通常1件ずつしか付与しないため、それ以外にも自宅・職場・その他
+// 人に見られたくない場所である可能性がある地点を候補として出せるよう、訪問回数
+// 上位N件をそれぞれ個別に提案する（issue #14）。
+const NUM_TOP_PLACE_SUGGESTIONS = 10;
+
 function computeSuggestions() {
   if (!state.raw) return [];
   const suggestions = [];
+  const homeWorkPoints = []; // 上位N件の候補から、既にHOME/WORKとして提案済みの地点を除外するための重複判定用
   for (const p of state.raw.frequentPlaces || []) {
     if (p.label !== 'HOME' && p.label !== 'WORK') continue;
     if (isInAnyZone(p.lat, p.lng, state.zones)) continue;
+    homeWorkPoints.push({ lat: p.lat, lng: p.lng, radiusMeters: 300 });
     const key = 'freq:' + (p.placeId || `${p.lat},${p.lng}`);
     if (state.dismissedSuggestions.has(key)) continue;
     const name = municipalityName(state.municipalityByCode, nearestMunicipalityCode(p.lat, p.lng));
@@ -1391,20 +1399,24 @@ function computeSuggestions() {
     });
   }
 
-  const allRanking = computeClusterRanking(applyPrivacy(state.raw, false), { privacy: false, municipalityByCode: state.municipalityByCode, limit: 1 });
-  if (allRanking.length > 0) {
-    const top = allRanking[0];
-    const key = 'top:' + top.clusterId;
-    if (!isInAnyZone(top.lat, top.lng, state.zones) && !state.dismissedSuggestions.has(key)) {
-      suggestions.push({
-        key,
-        text: `最も滞在回数が多い地点（${top.muniName}、${top.count}回、自宅の可能性があります）を除外ゾーンに登録しますか？（半径300m）`,
-        lat: top.lat,
-        lng: top.lng,
-        radiusMeters: 300,
-      });
-    }
-  }
+  const allRanking = computeClusterRanking(applyPrivacy(state.raw, false), {
+    privacy: false,
+    municipalityByCode: state.municipalityByCode,
+    limit: NUM_TOP_PLACE_SUGGESTIONS,
+  });
+  allRanking.forEach((row, i) => {
+    if (isInAnyZone(row.lat, row.lng, state.zones)) return;
+    if (isInAnyZone(row.lat, row.lng, homeWorkPoints)) return; // 上のHOME/WORK提案と同一地点なら重複表示しない
+    const key = 'top:' + row.clusterId;
+    if (state.dismissedSuggestions.has(key)) return;
+    suggestions.push({
+      key,
+      text: `よく訪れる地点（訪問回数 ${i + 1}位、${row.muniName}、${row.count}回）を除外ゾーンに登録しますか？自宅・職場など人に見られたくない場所の可能性がある場合にご利用ください（半径300m）`,
+      lat: row.lat,
+      lng: row.lng,
+      radiusMeters: 300,
+    });
+  });
   return suggestions;
 }
 
