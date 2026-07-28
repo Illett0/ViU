@@ -1699,6 +1699,21 @@ window.__pathBrowserTest = {
   getMapZoom() {
     return map ? { zoom: map.getZoom(), center: map.getCenter(), context: lastMapContext } : null;
   },
+  getView() {
+    return currentView(state);
+  },
+  // Converts a known fixture lat/lng into page (viewport) pixel coordinates,
+  // so E2E tests can dispatch a real mouse click at an exact map location
+  // (e.g. to hit a specific 滞在地点 pin, or a backdrop point known to fall
+  // inside a given prefecture's polygon) instead of guessing pixel offsets —
+  // real Leaflet click-handling/z-order bugs (see mapView.mjs) can only be
+  // exercised via genuine mouse events, not by calling goToPrefecture/goToPlace.
+  latLngToPoint(lat, lng) {
+    if (!map) return null;
+    const pt = map.latLngToContainerPoint([lat, lng]);
+    const rect = el.leafletMapDiv.getBoundingClientRect();
+    return { x: rect.left + pt.x, y: rect.top + pt.y };
+  },
   // Bypasses the actual folder-scan flow (real GPS-tagged photo files aren't
   // available in a test/CI context) so the photo-layer rendering path itself
   // can still be exercised end-to-end.

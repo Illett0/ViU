@@ -11,7 +11,8 @@
   "scripts": {
     "start": "electron .",
     "fetch:boundaries": "node scripts/fetch-municipality-boundaries.js",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "test:e2e": "node test/e2e/click-handling.spec.js"
   },
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
