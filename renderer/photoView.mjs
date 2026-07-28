@@ -128,7 +128,13 @@ export function clearPhotoLayer(map, layerRef) {
 
 function createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox } = {}) {
   const estimated = photo.source === 'estimated';
-  const marker = L.circleMarker([photo.lat, photo.lng], {
+  // `plotLat`/`plotLng` (see app.mjs's nudgePhotosAwayFromPins), when present,
+  // are a few pixels away from the photo's true coordinates — applied only
+  // when this photo would otherwise land pixel-exact on a 滞在地点 pin, which
+  // always wins that overlap (issue #23) and would leave the photo
+  // permanently unclickable on the map. Only the plotted position moves;
+  // `photo.lat`/`lng` below (popup metadata, resolvePlaceName) stay the real ones.
+  const marker = L.circleMarker([photo.plotLat ?? photo.lat, photo.plotLng ?? photo.lng], {
     radius: 7,
     color: PHOTO_MARKER_BORDER,
     weight: 2,
@@ -225,7 +231,19 @@ export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOp
 
   for (const photo of photos) {
     nextPaths.add(photo.filePath);
-    if (markersByPath.has(photo.filePath)) continue; // Unchanged since last render — leave its marker (and any open popup) alone.
+    const targetLat = photo.plotLat ?? photo.lat;
+    const targetLng = photo.plotLng ?? photo.lng;
+    const existing = markersByPath.get(photo.filePath);
+    if (existing) {
+      const cur = existing.getLatLng();
+      if (cur.lat === targetLat && cur.lng === targetLng) continue; // Unchanged since last render — leave its marker (and any open popup) alone.
+      // plotLat/plotLng shifted (e.g. the map zoomed/panned enough to change
+      // whether this photo needs nudging away from a stay-point pin) — rebuilt
+      // rather than moved in place, since leaflet.markercluster's spatial index
+      // isn't guaranteed to stay consistent after repositioning a member marker.
+      cluster.removeLayer(existing);
+      markersByPath.delete(photo.filePath);
+    }
     const marker = createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox });
     cluster.addLayer(marker);
     markersByPath.set(photo.filePath, marker);
