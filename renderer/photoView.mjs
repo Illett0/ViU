@@ -70,16 +70,32 @@ function popupHtml(photo, placeName) {
 // even on a smallish window (Leaflet auto-pans the popup into view).
 const GALLERY_POPUP_WIDTH = 408;
 
-function galleryHtml(photos) {
+// Issue #24 made a single click open the gallery for a cluster of *any*
+// size, no more staged zoom-in first — which previously kept clusters small
+// by the time their gallery could ever open. `photos:get-thumbnail` (main.js)
+// decodes/resizes/encodes each image on the main process thread (Electron's
+// nativeImage isn't usable off it), so a big, loosely-zoomed cluster could
+// fire dozens/hundreds of thumbnail requests at once and visibly freeze the
+// whole app on that first click. GALLERY_FETCH_CONCURRENCY bounds how many
+// are ever in flight together; MAX_GALLERY_PHOTOS caps the truly pathological
+// case (hundreds of photos in one loosely-clustered group).
+const MAX_GALLERY_PHOTOS = 80;
+const GALLERY_FETCH_CONCURRENCY = 4;
+
+function galleryHtml(photos, totalCount) {
   const thumbs = photos
     .map(
       (photo, i) =>
         `<div class="photo-cluster-popup-thumb-wrap${photo.source === 'estimated' ? ' photo-cluster-popup-thumb-wrap--estimated' : ''}" data-index="${i}" title="${photo.source === 'estimated' ? '推定位置の写真' : ''}"><span class="photo-popup-loading">…</span></div>`
     )
     .join('');
+  const countLabel =
+    totalCount > photos.length
+      ? `${photos.length}枚を表示中（他${totalCount - photos.length}枚 — ズームインして絞り込んでください）`
+      : `${photos.length}枚の写真`;
   return `
     <div class="photo-cluster-popup">
-      <div class="photo-cluster-popup-count">${photos.length}枚の写真</div>
+      <div class="photo-cluster-popup-count">${countLabel}</div>
       <div class="photo-cluster-popup-grid">${thumbs}</div>
     </div>`;
 }
@@ -89,8 +105,9 @@ function galleryHtml(photos) {
 // pin individually — the default leaflet.markercluster behavior becomes
 // unusable once several photos share (near-)identical coordinates (e.g.
 // burst shots), since spiderfied pins at max zoom end up stacked and tiny.
-function openClusterGallery(map, latlng, photos, { onOpenLightbox } = {}) {
-  if (!photos || photos.length === 0) return;
+function openClusterGallery(map, latlng, allPhotos, { onOpenLightbox } = {}) {
+  if (!allPhotos || allPhotos.length === 0) return;
+  const photos = allPhotos.slice(0, MAX_GALLERY_PHOTOS);
 
   // minWidth is what actually sizes the popup: the grid's 1fr columns and
   // width:100% thumbnails never push the content wider on their own, so
@@ -98,24 +115,45 @@ function openClusterGallery(map, latlng, photos, { onOpenLightbox } = {}) {
   // tiny (issue #17).
   const popup = L.popup({ minWidth: GALLERY_POPUP_WIDTH, maxWidth: GALLERY_POPUP_WIDTH })
     .setLatLng(latlng)
-    .setContent(galleryHtml(photos))
+    .setContent(galleryHtml(photos, allPhotos.length))
     .openOn(map);
 
   const popupEl = popup.getElement();
   if (!popupEl) return;
-  photos.forEach(async (photo, i) => {
-    const wrap = popupEl.querySelector(`.photo-cluster-popup-thumb-wrap[data-index="${i}"]`);
-    if (!wrap) return;
-    const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
-    if (result && result.dataUrl) {
-      wrap.innerHTML = `<img src="${result.dataUrl}" alt="" />`;
-      wrap.addEventListener('click', () => {
-        if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
-      });
-    } else {
-      wrap.innerHTML = '<span class="photo-popup-unsupported">非対応</span>';
-    }
+
+  // Fixed-size worker pool over the photo list, instead of firing every
+  // fetch at once — bounds how many photos:get-thumbnail IPC calls (and
+  // their main-thread image decode/resize/encode work) are in flight
+  // together, and stops issuing new ones once the popup itself has closed
+  // (no point decoding thumbnails nobody can see anymore).
+  let cancelled = false;
+  popup.on('remove', () => {
+    cancelled = true;
   });
+
+  let nextIndex = 0;
+  async function fetchNext() {
+    if (cancelled) return;
+    const i = nextIndex++;
+    if (i >= photos.length) return;
+    const photo = photos[i];
+    const wrap = popupEl.querySelector(`.photo-cluster-popup-thumb-wrap[data-index="${i}"]`);
+    if (wrap) {
+      const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
+      if (cancelled) return;
+      if (result && result.dataUrl) {
+        wrap.innerHTML = `<img src="${result.dataUrl}" alt="" />`;
+        wrap.addEventListener('click', () => {
+          if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
+        });
+      } else {
+        wrap.innerHTML = '<span class="photo-popup-unsupported">非対応</span>';
+      }
+    }
+    await fetchNext();
+  }
+  const workerCount = Math.min(GALLERY_FETCH_CONCURRENCY, photos.length);
+  for (let w = 0; w < workerCount; w++) fetchNext();
 }
 
 export function clearPhotoLayer(map, layerRef) {
