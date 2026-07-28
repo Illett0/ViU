@@ -31,6 +31,8 @@
   "build": {
     "appId": "dev.illett.viu",
     "productName": "ViU",
+    "compression": "maximum",
+    "electronLanguages": ["ja", "en-US"],
     "directories": {
       "output": "dist"
     },
