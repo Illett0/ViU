@@ -24,10 +24,12 @@ exclusion-zones.json
 recent-files.json
 timeline-backups/
 
-# Build output / OS / editor cruft.
+# Build output / OS / editor cruft. Actual electron-builder output goes to
+# dist/ (see package.json's directories.output) — build/ is NOT build output
+# in this project, it holds committed static build inputs (build/icon.ico),
+# so it's deliberately not listed here.
 dist/
 out/
-build/
 .DS_Store
 Thumbs.db
 .vscode/
