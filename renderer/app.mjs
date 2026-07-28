@@ -760,14 +760,26 @@ const PHOTO_NUDGE_DISTANCE_PX = 30;
 // each other even though they're kilometers apart in reality. Without this,
 // every photo anywhere near *any* visible pin at that zoom got nudged,
 // scattering the whole photo layer instead of only fixing the rare
-// literally-the-same-spot case this was meant for. 150m comfortably covers
-// GPS jitter plus this app's own visit-clustering radius (20–200m, default
-// 50m — see the clusterThreshold slider), without reaching into "just
-// visited the same neighborhood" territory.
-const PHOTO_NUDGE_TRIGGER_METERS = 150;
-
+// literally-the-same-spot case this was meant for.
+//
+// The gate is `state.clusterThreshold` (this app's own visit-clustering
+// radius, 20–200m, default 50m — the slider in the header), not a fixed
+// constant: two stay points any closer together than that would already
+// have been merged into a single pin by the app's own clustering (lib/cluster.js
+// is a transitive union-find over exactly this distance), so using the same
+// radius guarantees at most one candidate pin is ever "close enough" to a
+// given photo. A larger fixed radius (this used to be a flat 150m) doesn't
+// have that guarantee — with several *distinct* nearby stay points (e.g. a
+// regular commute through a few nearby stations, all within 100–150m of each
+// other but each its own pin), every photo would still pick whichever pin
+// happens to be nearest to *it specifically*, pulling different subsets of
+// what should have clustered together toward different targets and
+// fragmenting one tidy group into a scatter of small dots (reported against
+// real photo data: 2,000+ timeline-estimated photos near a frequently-visited
+// area).
 function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
   if (!stayPinLatLngs.length || !photos.length) return photos;
+  const triggerMeters = state.clusterThreshold;
   return photos.map((photo) => {
     let nearestPin = null;
     let nearestMeters = Infinity;
@@ -780,7 +792,7 @@ function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
     }
     // Cheap real-world check first — rules out the zoomed-out false-positive
     // case above without ever touching the map for a coordinate conversion.
-    if (!nearestPin || nearestMeters > PHOTO_NUDGE_TRIGGER_METERS) return photo;
+    if (!nearestPin || nearestMeters > triggerMeters) return photo;
 
     const pt = map.latLngToContainerPoint([photo.lat, photo.lng]);
     const pinPt = map.latLngToContainerPoint(nearestPin);

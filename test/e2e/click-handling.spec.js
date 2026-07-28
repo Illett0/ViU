@@ -310,10 +310,11 @@ async function main() {
 
       // ~10 screen pixels away from CLUSTER_A at whatever zoom the prefecture
       // fit landed on — comfortably inside the nudge's pixel trigger, but (at
-      // this zoomed-out level) far more than the 150m real-world gate.
+      // this zoomed-out level) far more than the real-world gate (this app's
+      // own clusterThreshold, default 50m — see app.mjs's nudgePhotosAwayFromPins).
       const metersPerPixel = (156543.03392 * Math.cos((CLUSTER_A.lat * Math.PI) / 180)) / Math.pow(2, zoom);
       const realDistanceMeters = metersPerPixel * 10;
-      assert(realDistanceMeters > 150, `test setup invalid: expected >150m at zoom ${zoom}, got ${realDistanceMeters.toFixed(0)}m — the fitted zoom changed, adjust this test`);
+      assert(realDistanceMeters > 50, `test setup invalid: expected >50m at zoom ${zoom}, got ${realDistanceMeters.toFixed(0)}m — the fitted zoom changed, adjust this test`);
       const farButPixelClose = { lat: CLUSTER_A.lat + (metersPerPixel * 10) / 111320, lng: CLUSTER_A.lng };
 
       await page.evaluate((photo) => window.__pathBrowserTest.setPhotos([photo]), {
