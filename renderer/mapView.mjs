@@ -79,18 +79,20 @@ export function initMap(containerEl) {
   // always hit-test above any polygon layer, regardless of which one was
   // most recently recreated — more robust than relying on bringToFront()
   // call ordering between renders.
+  // Above photoMarkerPane (640, see photoView.mjs's ensurePhotoPane), not just
+  // above the default overlayPane (400) — a 滞在地点 pin must stay clickable
+  // even when a GPS-tagged photo sits at (or very near) the same coordinates.
+  // This used to only elevate whichever pin was already selected/drilled
+  // into, but that left a chicken-and-egg deadlock: the *first* click that
+  // selects such a pin happens while nothing is selected yet, so the pin
+  // wasn't elevated at the moment it needed to be, and the click landed on
+  // the photo instead — the place could never be reached via the map at all
+  // (issue #23). Elevating every 滞在地点 pin unconditionally avoids that;
+  // the tradeoff is that a photo exactly coincident with a stay-point pin
+  // can't be clicked directly on the map (still reachable via the photo
+  // cluster gallery/other pins nearby).
   map.createPane('clusterMarkerPane');
-  map.getPane('clusterMarkerPane').style.zIndex = 620;
-
-  // Above photoMarkerPane (640, see photoView.mjs's ensurePhotoPane) —
-  // reserved for whichever single 滞在地点 pin is currently selected/drilled
-  // into (see renderClusterMarkers' `selectedKey`), so that pin stays
-  // clickable even when a GPS-tagged photo sits at (or very near) the same
-  // coordinates. Every other, non-selected pin stays in clusterMarkerPane
-  // and can still be covered by the photo layer — this only rescues the one
-  // pin the user is actively looking at (issue #23).
-  map.createPane('selectedMarkerPane');
-  map.getPane('selectedMarkerPane').style.zIndex = 650;
+  map.getPane('clusterMarkerPane').style.zIndex = 645;
 
   return map;
 }
@@ -313,12 +315,7 @@ export function clearMarkers(markerLayerRef) {
 // list (via the shared formatPlaceLabel), instead of just the muni name.
 // Returns Map<row-key, marker> so the caller can push a label update into an
 // already-open tooltip later, once its fetch resolves.
-// `selectedKey` (row.clusterId, or 'muni:'+muniCode — same key scheme as
-// markersByKey) — when set, that one marker is created in selectedMarkerPane
-// instead of clusterMarkerPane, so it stays clickable above the photo layer
-// even directly under a photo pin (issue #23). Every other marker is
-// unaffected and can still be covered by photos.
-export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labelCache = null, selectedKey = null) {
+export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labelCache = null) {
   if (!markerLayerRef.layer) {
     markerLayerRef.layer = L.layerGroup().addTo(map);
   }
@@ -334,12 +331,12 @@ export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labe
       weight: 2,
       fillColor: MARKER_FILL_COLOR,
       fillOpacity: 0.9,
-      // Own pane (see initMap) with a higher z-index than the default
-      // overlayPane polygons render into — guarantees this pin is always on
-      // top and clickable, regardless of which polygon layer was most
-      // recently torn down and rebuilt on top of it in DOM order. The
-      // selected pin instead goes one pane higher still, above photos.
-      pane: key === selectedKey ? 'selectedMarkerPane' : 'clusterMarkerPane',
+      // Own pane (see initMap) with a higher z-index than both the default
+      // overlayPane polygons and the photo layer render into — guarantees
+      // this pin is always on top and clickable, regardless of which
+      // polygon layer was most recently torn down and rebuilt on top of it
+      // in DOM order, and regardless of a coincident GPS-tagged photo pin.
+      pane: 'clusterMarkerPane',
     });
     const labelEntry = labelCache && row.clusterId != null ? labelCache.get(row.clusterId) : null;
     const nameLabel = row.muniName ? formatPlaceLabel(row.muniName, labelEntry) : '';

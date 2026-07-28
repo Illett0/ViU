@@ -845,9 +845,7 @@ function renderMapTab(derived) {
         { dimmed: true }
       );
     }
-    const selectedKey =
-      view.view === 'place' ? view.params.clusterId ?? (view.params.muniCode != null ? 'muni:' + view.params.muniCode : null) : null;
-    renderPrefectureDetail(derived, prefCode, selectedKey);
+    renderPrefectureDetail(derived, prefCode);
     if (view.view === 'place') {
       // Overlays the place-specific stat panel over the ranking list that
       // renderPrefectureDetail just built, and highlights that place's pin.
@@ -1036,7 +1034,7 @@ function renderNationalDetail(derived) {
   el.detailPanelContent.innerHTML = parts.join('');
 }
 
-function renderPrefectureDetail(derived, code, selectedKey = null) {
+function renderPrefectureDetail(derived, code) {
   const entry = derived.periodAggregates.get(code);
   const name = entry ? entry.name : '不明';
   const placeCount = entry ? entry.placeCount : 0;
@@ -1098,7 +1096,7 @@ function renderPrefectureDetail(derived, code, selectedKey = null) {
     navigateTo(state, 'place', { clusterId: row.clusterId ?? null, muniCode: row.muniCode ?? null, code });
     render();
   };
-  currentMarkersByKey = renderClusterMarkers(map, markerLayerRef, rows, goToRow, state.placeLabelCache, selectedKey);
+  currentMarkersByKey = renderClusterMarkers(map, markerLayerRef, rows, goToRow, state.placeLabelCache);
   for (const row of rows) {
     const marker = currentMarkersByKey.get(row.clusterId ?? 'muni:' + row.muniCode);
     if (marker) {
