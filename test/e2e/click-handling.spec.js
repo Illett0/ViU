@@ -249,6 +249,31 @@ async function main() {
       assert.strictEqual(view.params.clusterId, rowA.clusterId);
     });
 
+    // ---- Follow-up to issue #23: a photo pixel-exactly coincident with a
+    // stay-point pin is nudged a few pixels away (app.mjs's
+    // nudgePhotosAwayFromPins) so it stays independently clickable too,
+    // instead of being permanently hidden behind the (correctly-winning)
+    // stay-point pin forever ----
+    await step('a photo coincident with a stay-point pin is nudged and independently clickable', async () => {
+      await goToPlace(page, { clusterId: rowA.clusterId, muniCode: rowA.muniCode, code: TOKYO_CODE });
+      const photoOn = (await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerCount())).map > 0;
+      if (!photoOn) await page.evaluate(() => window.__pathBrowserTest.togglePhotoLayer());
+      await page.waitForTimeout(300);
+
+      const plotted = await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerLatLngs());
+      const tokyoPhoto = plotted.find((p) => p.filePath.includes('tokyo_stay'));
+      assert(tokyoPhoto, 'expected the tokyo_stay.jpg marker to be plotted');
+      assert(
+        !near(tokyoPhoto.lat, CLUSTER_A.lat) || !near(tokyoPhoto.lng, CLUSTER_A.lng),
+        'a photo exactly coincident with a stay-point pin should have been nudged to a different plotted position'
+      );
+
+      const pt = await page.evaluate(({ lat, lng }) => window.__pathBrowserTest.latLngToPoint(lat, lng), tokyoPhoto);
+      await page.mouse.click(pt.x, pt.y);
+      await page.waitForTimeout(300);
+      assert(await page.$('.photo-popup'), 'clicking the nudged photo marker should open its popup');
+    });
+
     // ---- Issue #24: photo cluster opens the gallery on the very first
     // click, no staged zoom-in across repeated clicks ----
     await step('issue #24: a photo cluster opens the gallery in one click without changing zoom', async () => {

@@ -736,6 +736,57 @@ function scheduleMuniViewportRedraw() {
   });
 }
 
+// A 滞在地点 pin always wins a pixel-exact overlap with a photo pin (see
+// mapView.mjs's clusterMarkerPane/photoMarkerPane z-order, issue #23) — without
+// this, a photo whose coordinates happen to sit right on a stay-point pin
+// would be permanently unclickable on the map. Nudging in *screen pixels*
+// (not a fixed real-world distance) keeps the visual gap consistent
+// regardless of zoom: a fixed-meters offset would be too small to separate
+// the pins at a typical place-level zoom (PLACE_ZOOM=14, where a few dozen
+// meters is only a couple of pixels) while being needlessly large — and a
+// visible misrepresentation of where the photo was taken — at a closer zoom.
+// Only the *plotted* position moves; photo.lat/lng (popup metadata,
+// resolvePlaceName) are left untouched — see photoView.mjs's createPhotoMarker.
+// Distance must clear the *largest* a stay-point pin can render at: base
+// radius 6 + up to 10 (log1p(count) term, mapView.mjs's renderClusterMarkers)
+// + 4 more if it's the selected pin (highlightSelectedMarker) = up to ~20px,
+// plus the photo marker's own 7px radius — 30px leaves a safe margin over
+// that ~27px worst case instead of just clearing the trigger threshold.
+const PHOTO_NUDGE_TRIGGER_PX = 20;
+const PHOTO_NUDGE_DISTANCE_PX = 30;
+
+function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
+  if (!stayPinLatLngs.length || !photos.length) return photos;
+  const pinPoints = stayPinLatLngs.map((ll) => map.latLngToContainerPoint(ll));
+  return photos.map((photo) => {
+    const pt = map.latLngToContainerPoint([photo.lat, photo.lng]);
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const pinPt of pinPoints) {
+      const d = Math.hypot(pt.x - pinPt.x, pt.y - pinPt.y);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = pinPt;
+      }
+    }
+    if (!nearest || nearestDist >= PHOTO_NUDGE_TRIGGER_PX) return photo;
+    let dx = pt.x - nearest.x;
+    let dy = pt.y - nearest.y;
+    if (nearestDist < 1) {
+      // Pixel-exact overlap (the common case — same GPS coordinate): the
+      // direction "away from the pin" is undefined, so pick a fixed one.
+      dx = 1;
+      dy = -1;
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    const nudged = map.containerPointToLatLng({
+      x: nearest.x + (dx / len) * PHOTO_NUDGE_DISTANCE_PX,
+      y: nearest.y + (dy / len) * PHOTO_NUDGE_DISTANCE_PX,
+    });
+    return { ...photo, plotLat: nudged.lat, plotLng: nudged.lng };
+  });
+}
+
 function renderMapTab(derived) {
   const view = currentView(state);
   // clusterId/muniCode are included so that switching between two different
@@ -859,7 +910,11 @@ function renderMapTab(derived) {
   }
 
   if (state.photoLayerVisible) {
-    renderPhotoLayer(map, photoLayerRef, getVisiblePhotos(), { resolvePlaceName, onOpenLightbox: openPhotoLightbox });
+    const stayPinLatLngs = view.view === 'national' ? [] : [...currentMarkersByKey.values()].map((m) => m.getLatLng());
+    renderPhotoLayer(map, photoLayerRef, nudgePhotosAwayFromPins(getVisiblePhotos(), stayPinLatLngs), {
+      resolvePlaceName,
+      onOpenLightbox: openPhotoLightbox,
+    });
   } else {
     clearPhotoLayer(map, photoLayerRef);
   }
@@ -1736,6 +1791,17 @@ window.__pathBrowserTest = {
       map: photoLayerRef.markersByPath ? photoLayerRef.markersByPath.size : 0,
       route: routePhotoLayerRef.markersByPath ? routePhotoLayerRef.markersByPath.size : 0,
     };
+  },
+  // Actual plotted position of each photo marker on the 制覇マップ (post
+  // nudgePhotosAwayFromPins) — lets E2E tests click exactly on a photo even
+  // when it's been nudged away from its true coordinates to clear a
+  // coincident 滞在地点 pin (issue #23).
+  getPhotoMarkerLatLngs() {
+    if (!photoLayerRef.markersByPath) return [];
+    return [...photoLayerRef.markersByPath.entries()].map(([filePath, marker]) => {
+      const ll = marker.getLatLng();
+      return { filePath, lat: ll.lat, lng: ll.lng };
+    });
   },
   togglePhotoLayer,
 };
