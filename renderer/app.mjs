@@ -775,6 +775,14 @@ function renderMapTab(derived) {
       state.prefGeoJSON,
       derived.periodAggregates,
       (code) => {
+        // The backdrop covers the entire visible map under a 'place' view,
+        // while the actual 滞在地点 pin the user is looking at is a small
+        // circle floating on top of it — any click that merely misses the
+        // pin (i.e. most of the screen) lands here instead. When `code` is
+        // the prefecture already selected, that's not a "switch prefecture"
+        // gesture, it's a misclick, so it must not reset the drilled-down
+        // place selection back to the bare prefecture ranking.
+        if (code === selectedCode) return;
         navigateTo(state, 'prefecture', { code });
         render();
       },
@@ -837,7 +845,9 @@ function renderMapTab(derived) {
         { dimmed: true }
       );
     }
-    renderPrefectureDetail(derived, prefCode);
+    const selectedKey =
+      view.view === 'place' ? view.params.clusterId ?? (view.params.muniCode != null ? 'muni:' + view.params.muniCode : null) : null;
+    renderPrefectureDetail(derived, prefCode, selectedKey);
     if (view.view === 'place') {
       // Overlays the place-specific stat panel over the ranking list that
       // renderPrefectureDetail just built, and highlights that place's pin.
@@ -994,7 +1004,22 @@ function wireBackLink() {
   const btn = el.detailPanelContent.querySelector('[data-nav="back"]');
   if (btn) {
     btn.addEventListener('click', () => {
-      goBack(state);
+      // Deliberately NOT goBack(state): the label ("← 都道府県に戻る" /
+      // "← 日本地図に戻る") promises a specific hierarchy-parent destination,
+      // but goBack() just pops the shared linear history stack, which can
+      // also be pushed to from unrelated entry points (Chronology tab,
+      // breadcrumbs, the Stats-tab map jump) — so "back" could land
+      // somewhere that isn't this view's parent at all. Navigate to the
+      // computed parent directly instead. 'place' always belongs to its
+      // prefecture (municipality-granularity 'place' still reuses the same
+      // prefecture map, see renderMapTab), and 'prefecture' always belongs
+      // to the national view.
+      const view = currentView(state);
+      if (view.view === 'place') {
+        navigateTo(state, 'prefecture', { code: view.params.code });
+      } else if (view.view === 'prefecture') {
+        navigateTo(state, 'national', {});
+      }
       render();
     });
   }
@@ -1011,7 +1036,7 @@ function renderNationalDetail(derived) {
   el.detailPanelContent.innerHTML = parts.join('');
 }
 
-function renderPrefectureDetail(derived, code) {
+function renderPrefectureDetail(derived, code, selectedKey = null) {
   const entry = derived.periodAggregates.get(code);
   const name = entry ? entry.name : '不明';
   const placeCount = entry ? entry.placeCount : 0;
@@ -1073,7 +1098,7 @@ function renderPrefectureDetail(derived, code) {
     navigateTo(state, 'place', { clusterId: row.clusterId ?? null, muniCode: row.muniCode ?? null, code });
     render();
   };
-  currentMarkersByKey = renderClusterMarkers(map, markerLayerRef, rows, goToRow, state.placeLabelCache);
+  currentMarkersByKey = renderClusterMarkers(map, markerLayerRef, rows, goToRow, state.placeLabelCache, selectedKey);
   for (const row of rows) {
     const marker = currentMarkersByKey.get(row.clusterId ?? 'muni:' + row.muniCode);
     if (marker) {

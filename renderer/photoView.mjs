@@ -204,21 +204,14 @@ export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOp
         }),
     });
     layerRef.layer.on('clusterclick', (e) => {
-      // Compare against the zoom fitBounds would actually land on for this
-      // cluster's own bounds, not the map's absolute max zoom — fitBounds
-      // jumps straight to its target zoom rather than stepping in, so a
-      // cluster whose real-world spread fits at, say, zoom 16 would
-      // otherwise re-fit to that same zoom 16 on every click forever,
-      // never reaching the map max and never opening the gallery. This hit
-      // GPS-tagged photo clusters especially hard (their pins are spread
-      // over real walking distance, unlike same-coordinate 推定/estimated
-      // pins whose zero-size bounds happened to fit-zoom straight to max).
-      const bounds = e.layer.getBounds().pad(0.5);
-      const targetZoom = map.getBoundsZoom(bounds);
-      if (targetZoom > map.getZoom()) {
-        map.fitBounds(bounds);
-        return;
-      }
+      // Always open the gallery directly on the first click (issue #24).
+      // This used to zoom in one step per click until the cluster's own
+      // bounds fit the viewport, only opening the gallery once no further
+      // zoom-in was possible — for a loosely-spread cluster (e.g. a few
+      // photos taken while walking) that could take 3+ clicks to reach the
+      // gallery, which read as the cluster simply not responding to clicks
+      // rather than zooming. The map's zoom level is left untouched here;
+      // the gallery already shows every photo in the cluster regardless.
       const photos = e.layer.getAllChildMarkers().map((m) => m.photo).filter(Boolean);
       openClusterGallery(map, e.layer.getLatLng(), photos, { onOpenLightbox });
     });
