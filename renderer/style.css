@@ -57,6 +57,13 @@ html, body {
   color: var(--color-accent);
 }
 
+#app-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
 #breadcrumb {
   flex: 1;
   text-align: center;
