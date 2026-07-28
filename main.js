@@ -11,6 +11,17 @@ const geoCache = require('./lib/geoCache');
 const photoCache = require('./lib/photoCache');
 const thumbnailCache = require('./lib/thumbnailCache');
 
+// Test-only escape hatch, mirroring PATHBROWSER_TEST_FILE/PATHBROWSER_TEST_PHOTO_FOLDER:
+// isolates the E2E suite's on-disk state (recent-files history, exclusion
+// zones, geo/nominatim/photo/thumbnail caches, linked photo folder) from
+// whatever the developer's own Electron profile has accumulated, so repeated
+// `npm run test:e2e` runs start from a clean slate instead of depending on
+// leftover state from a previous run or from real app usage. Must be set
+// before app.whenReady() — userData is read at window/IPC-handler creation.
+if (process.env.PATHBROWSER_TEST_USERDATA) {
+  app.setPath('userData', process.env.PATHBROWSER_TEST_USERDATA);
+}
+
 let mainWindow;
 let prefectureGeoJSONCache = null;
 let municipalityGeoJSONCache = null;

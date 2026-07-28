@@ -1,0 +1,251 @@
+{
+  "semanticSegments": [
+    {
+      "startTime": "2024-01-05T08:00:00.000+09:00",
+      "endTime": "2024-01-05T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-01-12T08:00:00.000+09:00",
+      "endTime": "2024-01-12T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-01-15T12:00:00.000+09:00",
+      "endTime": "2024-01-15T12:30:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-b",
+          "placeLocation": {
+            "latLng": "35.6820980°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-01-19T08:00:00.000+09:00",
+      "endTime": "2024-01-19T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-01-20T10:00:00.000+09:00",
+      "endTime": "2024-01-20T12:30:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "activity": {
+        "start": {
+          "latLng": "35.6812000°, 139.7671000°"
+        },
+        "end": {
+          "latLng": "34.7024850°, 135.4959510°"
+        },
+        "distanceMeters": 403000,
+        "topCandidate": {
+          "type": "IN_TRAIN"
+        }
+      }
+    },
+    {
+      "startTime": "2024-01-20T10:00:00.000+09:00",
+      "endTime": "2024-01-20T12:30:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "timelinePath": [
+        {
+          "point": "35.6812000°, 139.7671000°",
+          "time": "2024-01-20T10:00:00.000+09:00"
+        },
+        {
+          "point": "35.4000000°, 137.5000000°",
+          "time": "2024-01-20T11:15:00.000+09:00"
+        },
+        {
+          "point": "34.7024850°, 135.4959510°",
+          "time": "2024-01-20T12:30:00.000+09:00"
+        }
+      ]
+    },
+    {
+      "startTime": "2024-01-20T14:00:00.000+09:00",
+      "endTime": "2024-01-20T15:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-osaka-a",
+          "placeLocation": {
+            "latLng": "34.7024850°, 135.4959510°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-01-26T08:00:00.000+09:00",
+      "endTime": "2024-01-26T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-02T08:00:00.000+09:00",
+      "endTime": "2024-02-02T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-09T08:00:00.000+09:00",
+      "endTime": "2024-02-09T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-15T12:00:00.000+09:00",
+      "endTime": "2024-02-15T12:30:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-b",
+          "placeLocation": {
+            "latLng": "35.6820980°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-16T08:00:00.000+09:00",
+      "endTime": "2024-02-16T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-20T14:00:00.000+09:00",
+      "endTime": "2024-02-20T15:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-osaka-a",
+          "placeLocation": {
+            "latLng": "34.7024850°, 135.4959510°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-23T08:00:00.000+09:00",
+      "endTime": "2024-02-23T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-01T08:00:00.000+09:00",
+      "endTime": "2024-03-01T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-08T08:00:00.000+09:00",
+      "endTime": "2024-03-08T09:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-cluster-a",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-20T14:00:00.000+09:00",
+      "endTime": "2024-03-20T15:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fixture-osaka-a",
+          "placeLocation": {
+            "latLng": "34.7024850°, 135.4959510°"
+          }
+        }
+      }
+    }
+  ],
+  "userLocationProfile": {}
+}
