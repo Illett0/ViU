@@ -174,7 +174,7 @@ ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) 
 // Nominatim reverse-geocode labels, scanned photo metadata, generated
 // thumbnails). Does NOT touch recent-files history, backups, exclusion
 // zones, or the linked photo folder itself — those are user data/settings,
-// not caches, and this button is scoped to "make PathBrowser recompute from
+// not caches, and this button is scoped to "make ViU recompute from
 // scratch" only.
 ipcMain.handle('cache:clear', async () => {
   const userDataPath = app.getPath('userData');
@@ -333,7 +333,7 @@ ipcMain.handle('timeline:export-png', async (event, rect) => {
 
   const result = await dialog.showSaveDialog(mainWindow, {
     title: '制覇マップをPNGで保存',
-    defaultPath: 'pathbrowser-map.png',
+    defaultPath: 'viu-map.png',
     filters: [{ name: 'PNG画像', extensions: ['png'] }],
   });
   if (result.canceled || !result.filePath) return null;

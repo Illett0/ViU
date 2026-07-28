@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm install              # install dependencies
 npm start                 # run the app (electron .) — opens a native file-picker dialog on launch
-npm run dist               # electron-builder: produces dist/PathBrowser Setup <version>.exe (Windows NSIS, x64 only)
+npm run dist               # electron-builder: produces dist/ViU Setup <version>.exe (Windows NSIS, x64 only)
 npm run fetch:boundaries   # regenerate data/municipalities.geojson from the 1% simplification (47 files, requires network) — one-off, not run in normal dev
 npm run test:e2e           # runs test/e2e/click-handling.spec.js via Playwright's _electron API against a real Electron process
 ```
@@ -47,6 +47,6 @@ This repo's `.gitignore` deliberately blocks real user data from ever being comm
 
 ## Repo context
 
-- GitHub: `Illett0/PathBrowser`. Issues are used to track staged/deferred work (e.g. a feature rolled out in stages); close with `gh issue close <番号>` when the corresponding work lands.
+- GitHub: `Illett0/ViU` (renamed from `PathBrowser`). Issues are used to track staged/deferred work (e.g. a feature rolled out in stages); close with `gh issue close <番号>` when the corresponding work lands.
 - License: PolyForm Noncommercial 1.0.0 — noncommercial use only.
 - README.md is comprehensive and kept current (feature list, data provenance, project layout, manual verification checklist) — check it before assuming something is undocumented.
