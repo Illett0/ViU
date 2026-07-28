@@ -295,6 +295,56 @@ async function main() {
       assert.strictEqual(zoomAfter, zoomBefore, 'a single cluster click should open the gallery without changing the zoom level');
     });
 
+    // ---- Follow-up to issue #24: a very large cluster must not flood the
+    // main process with a thumbnail decode for every single photo at once ----
+    //
+    // photos:get-thumbnail (main.js) decodes/resizes/encodes on the main
+    // process thread — issue #24 made the *first* click on any cluster open
+    // its full gallery regardless of size, so a large, loosely-zoomed cluster
+    // (e.g. a whole prefecture of photos before zooming in) could fire
+    // dozens/hundreds of those at once and visibly freeze the app. Verifies
+    // photoView.mjs's openClusterGallery caps the grid (MAX_GALLERY_PHOTOS)
+    // and shows a truncation note, using synthetic photos injected via the
+    // test-only setPhotos hook (real files aren't needed — the thumbnail
+    // fetches are expected to fail gracefully for these fake paths, this is
+    // only checking the cap/UI, not real decode timing).
+    await step('a very large photo cluster is capped, not fetched all at once', async () => {
+      const LARGE_CLUSTER = { lat: 35.70, lng: 139.80 }; // arbitrary point, away from every other fixture pin
+      const synthetic = Array.from({ length: 120 }, (_, i) => ({
+        filePath: `C:\\fake\\synthetic_${i}.jpg`,
+        lat: LARGE_CLUSTER.lat,
+        lng: LARGE_CLUSTER.lng,
+        takenAtMs: 1700000000000 + i * 1000,
+        source: 'exif',
+      }));
+      await page.evaluate((photos) => window.__pathBrowserTest.setPhotos(photos), synthetic);
+      await goToPrefecture(page, TOKYO_CODE);
+      const photoOn = (await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerCount())).map > 0;
+      if (!photoOn) await page.evaluate(() => window.__pathBrowserTest.togglePhotoLayer());
+      await page.waitForSelector('.photo-marker-cluster', { state: 'visible', timeout: 10000 });
+
+      await page.locator('.photo-marker-cluster').first().click();
+      await page.waitForSelector('.photo-cluster-popup-grid', { timeout: 5000 });
+
+      // Scoped to the most recently opened gallery popup specifically — the
+      // previous step's Osaka gallery (3 thumbs) is a *separate*, standalone
+      // Leaflet popup that's still sitting in the DOM (nothing in these
+      // tests explicitly closes a gallery popup before moving on), so an
+      // unscoped page-wide count would double up with it.
+      const popup = page.locator('.photo-cluster-popup').last();
+      const thumbSlots = await popup.locator('.photo-cluster-popup-thumb-wrap').count();
+      assert.strictEqual(thumbSlots, 80, `expected the gallery to cap at 80 thumbnail slots, got ${thumbSlots}`);
+      const countText = await popup.locator('.photo-cluster-popup-count').textContent();
+      assert(countText.includes('他40枚'), `expected a truncation note mentioning the remaining 40 photos, got: ${countText}`);
+
+      // The capped, concurrency-limited fetches should still all resolve
+      // (to the "unsupported" placeholder, since these are fake paths)
+      // rather than leaving loading spinners forever.
+      await popup.locator('.photo-popup-loading').first().waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
+      const stillLoading = await popup.locator('.photo-popup-loading').count();
+      assert.strictEqual(stillLoading, 0, 'all capped thumbnail fetches should have resolved, none left spinning');
+    });
+
     console.log(`\nAll E2E checks passed (${stepNames.length} steps).`);
   } finally {
     await app.close().catch(() => {});
