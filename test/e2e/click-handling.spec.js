@@ -43,7 +43,7 @@ const PHOTO_FOLDER = path.join(__dirname, 'fixtures', 'photos');
 // Must match test/e2e/fixtures/timeline.sample.json and fixtures/photos/*.json exactly.
 const CLUSTER_A = { lat: 35.6812000, lng: 139.7671000 }; // Tokyo Station area — 10 visits, also a GPS photo (issue #23)
 const CLUSTER_B = { lat: 35.6820980, lng: 139.7671000 }; // ~100m N of A — 2 visits, distinct cluster (>50m threshold) that visually overlaps A at prefecture zoom
-const OSAKA = { lat: 34.7024850, lng: 135.4959510 }; // Osaka Station area — 3 visits, plus a 3-photo cluster (issue #24)
+const OSAKA = { lat: 34.7024850, lng: 135.4959510 }; // Osaka Station area — 3 visits. The fixture's 3-photo cluster (issue #24) sits ~6km away, not on this point — see fixtures/photos/osaka_*.jpg.json.
 const TOKYO_BACKDROP = { lat: 35.6896, lng: 139.6917 }; // Shinjuku — well inside Tokyo, several km from either cluster marker
 
 const TOKYO_CODE = 13;
@@ -211,9 +211,22 @@ async function main() {
       assert.strictEqual(view.params.clusterId, rowA.clusterId, 'the higher-count pin (cluster A, 10 visits) should win the click over cluster B (2 visits)');
     });
 
-    // ---- Issue #23: the selected pin sits above the photo layer ----
-    await step('issue #23: the selected stay-point pin stays clickable above a coincident photo pin', async () => {
-      await goToPlace(page, { clusterId: rowA.clusterId, muniCode: rowA.muniCode, code: TOKYO_CODE });
+    // ---- Issue #23: a 滞在地点 pin always sits above the photo layer, even
+    // *before* it's ever been selected ----
+    //
+    // The first implementation of this fix only elevated whichever pin was
+    // already selected/drilled into (a dedicated selectedMarkerPane above
+    // photoMarkerPane). That left a chicken-and-egg deadlock: the very
+    // *first* click that selects a pin happens while nothing is selected
+    // yet, so at that moment the pin wasn't elevated, and a coincident photo
+    // pin swallowed the click — the place could never be reached via the map
+    // at all if a photo happened to sit on its pin. Confirmed against the
+    // real app and fixed by elevating clusterMarkerPane itself above
+    // photoMarkerPane unconditionally (renderer/mapView.mjs's initMap), so
+    // this now has to pass starting from the *unselected* prefecture view.
+    await step('issue #23: a stay-point pin stays clickable above a coincident photo pin, even before selection', async () => {
+      await goToPrefecture(page, TOKYO_CODE);
+      assert.strictEqual((await getView(page)).view, 'prefecture', 'must start unselected — this is what exposed the original deadlock');
 
       const photoOn = (await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerCount())).map > 0;
       if (!photoOn) {
@@ -229,24 +242,23 @@ async function main() {
       await page.waitForTimeout(300);
 
       const photoPopup = await page.$('.photo-popup');
-      assert(!photoPopup, 'clicking the selected stay-point pin opened a photo popup instead — selectedMarkerPane z-order regression (issue #23)');
+      assert(!photoPopup, 'clicking the stay-point pin opened a photo popup instead — pane z-order regression (issue #23)');
 
       const view = await getView(page);
-      assert.strictEqual(view.view, 'place');
+      assert.strictEqual(view.view, 'place', 'the click should have drilled into the place — this is exactly the gesture the deadlock used to swallow');
       assert.strictEqual(view.params.clusterId, rowA.clusterId);
     });
 
     // ---- Issue #24: photo cluster opens the gallery on the very first
     // click, no staged zoom-in across repeated clicks ----
     await step('issue #24: a photo cluster opens the gallery in one click without changing zoom', async () => {
-      // Deliberately the *prefecture* ranking view, not the 'place' drill-down
-      // used above: a selected 滞在地点 pin renders in selectedMarkerPane
-      // (zIndex 650, above the photo layer's 640 — issue #23's own fix), and
-      // this fixture's Osaka photos sit right where the Osaka stay-point pin
-      // is, so drilling into that place would have the (correctly-fixed)
-      // selected pin itself intercept the click meant for the photo cluster.
-      // The plain prefecture view has no selectedKey, so the stay-point pin
-      // there sits in the ordinary clusterMarkerPane (620), below photos.
+      // This fixture's Osaka photo cluster (osaka_1/2/3) sits ~6km away from
+      // the Osaka stay-point pin, deliberately not coincident with it — since
+      // issue #23's fix now always keeps stay-point pins above the photo
+      // layer, a cluster placed exactly on a stay pin would have the pin
+      // (correctly) win every click there, which would be testing #23 again
+      // rather than #24. This keeps the two regressions independently
+      // verifiable.
       await goToPrefecture(page, OSAKA_CODE);
       await page.waitForSelector('.photo-marker-cluster', { state: 'visible', timeout: 10000 });
 
