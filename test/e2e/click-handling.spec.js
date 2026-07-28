@@ -295,6 +295,45 @@ async function main() {
       assert.strictEqual(zoomAfter, zoomBefore, 'a single cluster click should open the gallery without changing the zoom level');
     });
 
+    // ---- Regression: the pin-coincidence nudge above must NOT fire for
+    // photos that are only *pixel*-close to a pin because the map is zoomed
+    // way out (e.g. a prefecture-wide view, where a whole prefecture's stay
+    // points bunch up within a few screen pixels of each other despite being
+    // kilometers apart) — only genuine same-real-world-spot coincidences
+    // should move. Caught in real usage: an earlier version of this nudge
+    // used pixel distance alone, which scattered the whole photo layer at
+    // low zoom. Placed after every test that depends on the real scanned
+    // fixture photos (this one calls setPhotos, replacing them).
+    await step('a photo merely pixel-close at a zoomed-out view is not nudged', async () => {
+      await goToPrefecture(page, TOKYO_CODE); // prefecture-wide fit — zoomed well out
+      const { zoom } = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
+
+      // ~10 screen pixels away from CLUSTER_A at whatever zoom the prefecture
+      // fit landed on — comfortably inside the nudge's pixel trigger, but (at
+      // this zoomed-out level) far more than the 150m real-world gate.
+      const metersPerPixel = (156543.03392 * Math.cos((CLUSTER_A.lat * Math.PI) / 180)) / Math.pow(2, zoom);
+      const realDistanceMeters = metersPerPixel * 10;
+      assert(realDistanceMeters > 150, `test setup invalid: expected >150m at zoom ${zoom}, got ${realDistanceMeters.toFixed(0)}m — the fitted zoom changed, adjust this test`);
+      const farButPixelClose = { lat: CLUSTER_A.lat + (metersPerPixel * 10) / 111320, lng: CLUSTER_A.lng };
+
+      await page.evaluate((photo) => window.__pathBrowserTest.setPhotos([photo]), {
+        filePath: 'C:\\fake\\far_but_pixel_close.jpg',
+        lat: farButPixelClose.lat,
+        lng: farButPixelClose.lng,
+        takenAtMs: 1700000000000,
+        source: 'exif',
+      });
+      const photoOn = (await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerCount())).map > 0;
+      if (!photoOn) await page.evaluate(() => window.__pathBrowserTest.togglePhotoLayer());
+      await page.waitForTimeout(300);
+
+      const plotted = await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerLatLngs());
+      const photo = plotted.find((p) => p.filePath.includes('far_but_pixel_close'));
+      assert(photo, 'expected the synthetic photo marker to be plotted');
+      assert.strictEqual(photo.lat, farButPixelClose.lat, `a photo ${realDistanceMeters.toFixed(0)}m from the nearest pin should not have been nudged, but its plotted latitude changed`);
+      assert.strictEqual(photo.lng, farButPixelClose.lng, `a photo ${realDistanceMeters.toFixed(0)}m from the nearest pin should not have been nudged, but its plotted longitude changed`);
+    });
+
     // ---- Follow-up to issue #24: a very large cluster must not flood the
     // main process with a thumbnail decode for every single photo at once ----
     //

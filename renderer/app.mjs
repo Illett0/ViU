@@ -754,25 +754,41 @@ function scheduleMuniViewportRedraw() {
 // that ~27px worst case instead of just clearing the trigger threshold.
 const PHOTO_NUDGE_TRIGGER_PX = 20;
 const PHOTO_NUDGE_DISTANCE_PX = 30;
+// A real-world proximity gate *in addition to* the pixel check above — pixel
+// distance alone isn't enough, because at a zoomed-out view (e.g. a whole
+// prefecture) dozens of stay points bunch up within a few screen pixels of
+// each other even though they're kilometers apart in reality. Without this,
+// every photo anywhere near *any* visible pin at that zoom got nudged,
+// scattering the whole photo layer instead of only fixing the rare
+// literally-the-same-spot case this was meant for. 150m comfortably covers
+// GPS jitter plus this app's own visit-clustering radius (20–200m, default
+// 50m — see the clusterThreshold slider), without reaching into "just
+// visited the same neighborhood" territory.
+const PHOTO_NUDGE_TRIGGER_METERS = 150;
 
 function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
   if (!stayPinLatLngs.length || !photos.length) return photos;
-  const pinPoints = stayPinLatLngs.map((ll) => map.latLngToContainerPoint(ll));
   return photos.map((photo) => {
-    const pt = map.latLngToContainerPoint([photo.lat, photo.lng]);
-    let nearest = null;
-    let nearestDist = Infinity;
-    for (const pinPt of pinPoints) {
-      const d = Math.hypot(pt.x - pinPt.x, pt.y - pinPt.y);
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearest = pinPt;
+    let nearestPin = null;
+    let nearestMeters = Infinity;
+    for (const pin of stayPinLatLngs) {
+      const d = distanceMeters(photo.lat, photo.lng, pin.lat, pin.lng);
+      if (d < nearestMeters) {
+        nearestMeters = d;
+        nearestPin = pin;
       }
     }
-    if (!nearest || nearestDist >= PHOTO_NUDGE_TRIGGER_PX) return photo;
-    let dx = pt.x - nearest.x;
-    let dy = pt.y - nearest.y;
-    if (nearestDist < 1) {
+    // Cheap real-world check first — rules out the zoomed-out false-positive
+    // case above without ever touching the map for a coordinate conversion.
+    if (!nearestPin || nearestMeters > PHOTO_NUDGE_TRIGGER_METERS) return photo;
+
+    const pt = map.latLngToContainerPoint([photo.lat, photo.lng]);
+    const pinPt = map.latLngToContainerPoint(nearestPin);
+    let dx = pt.x - pinPt.x;
+    let dy = pt.y - pinPt.y;
+    const pxDist = Math.hypot(dx, dy);
+    if (pxDist >= PHOTO_NUDGE_TRIGGER_PX) return photo; // real-world close, but not actually overlapping on screen at this zoom
+    if (pxDist < 1) {
       // Pixel-exact overlap (the common case — same GPS coordinate): the
       // direction "away from the pin" is undefined, so pick a fixed one.
       dx = 1;
@@ -780,8 +796,8 @@ function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
     }
     const len = Math.hypot(dx, dy) || 1;
     const nudged = map.containerPointToLatLng({
-      x: nearest.x + (dx / len) * PHOTO_NUDGE_DISTANCE_PX,
-      y: nearest.y + (dy / len) * PHOTO_NUDGE_DISTANCE_PX,
+      x: pinPt.x + (dx / len) * PHOTO_NUDGE_DISTANCE_PX,
+      y: pinPt.y + (dy / len) * PHOTO_NUDGE_DISTANCE_PX,
     });
     return { ...photo, plotLat: nudged.lat, plotLng: nudged.lng };
   });
