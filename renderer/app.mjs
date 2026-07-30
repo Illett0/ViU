@@ -1776,6 +1776,15 @@ window.__pathBrowserTest = {
   getVisitedPrefectures() {
     return [...getDerived().periodAggregates.values()].filter((e) => e.stayCount > 0 || e.firstEpoch != null);
   },
+  // Pans/zooms the underlying Leaflet map to a prefecture's bounds without
+  // changing state.view — unlike goToPrefecture, this stays in the national
+  // coverage-map/timelapse view (aggregate coloring for all of Japan keeps
+  // animating), it just moves the camera. Useful for framing the timelapse
+  // playback on a specific region instead of the full-country zoom level.
+  panToPrefectureBounds(code) {
+    const feature = state.prefGeoJSON.features.find((f) => f.properties.code === code);
+    if (feature) map.fitBounds(mainlandBounds(feature), { padding: [20, 20] });
+  },
   getMunicipalityAggregates() {
     return [...getDerived().muniAggregates.values()].filter((e) => e.stayCount > 0);
   },
