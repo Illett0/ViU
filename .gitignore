@@ -41,3 +41,8 @@ Thumbs.db
 # data/municipalities.geojson to *.bak before overwriting — not personal
 # data, just a leftover working copy that shouldn't bloat the repo.
 *.bak
+
+# Standalone static intro page for a university seminar presentation —
+# intentionally independent of this repo (its own footer says so) and never
+# meant to be committed here.
+/ichikawa/
