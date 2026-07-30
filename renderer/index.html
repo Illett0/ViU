@@ -56,6 +56,8 @@
       <h2>Googleタイムラインの位置履歴を読み込む</h2>
       <p>Googleマップからエクスポートしたタイムライン(JSON)ファイルを開いてください。</p>
       <button id="btn-open-file-main" class="btn btn-primary">ファイルを選択</button>
+      <button id="btn-photos-only" class="btn">タイムラインなしで写真だけ見る</button>
+      <p>Googleタイムラインのデータがなくても、位置情報付きの写真だけを地図にプロットして見られます。</p>
       <div id="recent-files-section" hidden>
         <h3>最近使ったファイル</h3>
         <ul id="recent-files-list" class="recent-files-list"></ul>
@@ -89,6 +91,7 @@
     <section id="map-screen" hidden>
       <div id="map-panel">
         <div id="leaflet-map"></div>
+        <div id="photos-only-banner" class="badge photos-only-banner" hidden>タイムラインデータがないため、写真の位置情報のみ表示しています。タイムラインを読み込むには右上の「ファイルを開く」から。</div>
         <div id="prefecture-count-badge" class="badge"></div>
         <div id="island-badge" class="badge island-badge" hidden></div>
         <div id="map-controls" class="badge map-controls">

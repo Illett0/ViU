@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('pathBrowser', {
   parseFile: (filePath) => ipcRenderer.invoke('timeline:parse-file', filePath),
   getPrefectureGeoJSON: () => ipcRenderer.invoke('timeline:get-prefecture-geojson'),
   getMunicipalityGeoJSON: () => ipcRenderer.invoke('timeline:get-municipality-geojson'),
+  getReferenceLists: () => ipcRenderer.invoke('timeline:get-reference-lists'),
   recluster: (fingerprint, threshold, points) => ipcRenderer.invoke('timeline:recluster', { fingerprint, threshold, points }),
   reverseGeocode: (placeId, lat, lng) => ipcRenderer.invoke('timeline:reverse-geocode', { placeId, lat, lng }),
   getZones: () => ipcRenderer.invoke('timeline:get-zones'),

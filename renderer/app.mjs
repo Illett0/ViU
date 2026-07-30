@@ -67,6 +67,7 @@ state.linkedPhotoFolder = null;
 const el = {
   btnOpen: document.getElementById('btn-open-file'),
   btnOpenMain: document.getElementById('btn-open-file-main'),
+  btnPhotosOnly: document.getElementById('btn-photos-only'),
   welcome: document.getElementById('welcome-screen'),
   recentFilesSection: document.getElementById('recent-files-section'),
   recentFilesList: document.getElementById('recent-files-list'),
@@ -102,6 +103,7 @@ const el = {
   leafletMapDiv: document.getElementById('leaflet-map'),
   prefBadge: document.getElementById('prefecture-count-badge'),
   islandBadge: document.getElementById('island-badge'),
+  photosOnlyBanner: document.getElementById('photos-only-banner'),
   detailPanel: document.getElementById('detail-panel'),
   detailPanelContent: document.getElementById('detail-panel-content'),
   btnTimelapsePlay: document.getElementById('btn-timelapse-play'),
@@ -362,6 +364,12 @@ async function startPhotoScan(folder) {
     state.linkedPhotoFolder = folder;
     state.rawPhotos = result.photos || [];
     applyPhotoEstimates();
+    // populateYearOptions() reads state.raw.visits/pathPoints unguarded, so
+    // only call it once a timeline (real or 写真のみモード's stub) exists —
+    // refreshes the year filter to include these photos' taken-at years,
+    // which finishLoadingIntoApp()'s earlier call couldn't have known about
+    // yet (photo linking happens after that, in the settings screen).
+    if (state.raw) populateYearOptions();
     const estimatedCount = state.photos.filter((p) => p.source === 'estimated').length;
     el.photoLinkedFolder.textContent = folder;
     el.photoScanSummary.textContent = formatPhotoScanSummary(result.summary, estimatedCount);
@@ -439,49 +447,10 @@ async function openFile(explicitPath) {
       zonesReady,
     ]);
     state.raw = result;
+    state.photosOnlyMode = false; // in case this is reached from within 写真のみモード (header's "ファイルを開く")
     state.prefGeoJSON = prefGeoJSON;
     state.muniGeoJSON = muniGeoJSON;
-    state.municipalityByCode = buildMunicipalityIndex(result.municipalities);
-    state.clusterThreshold = 50;
-    applyPhotoEstimates(); // a folder linked before this file was open may now gain Stage3 estimates
-    state.history = [{ view: 'national', params: {} }];
-    state.historyIndex = 0;
-    state.filter = { year: null, month: null };
-    state.dismissedSuggestions = new Set();
-    lastMapContext = null;
-
-    populateYearOptions();
-    el.clusterThresholdInput.value = '50';
-    el.clusterThresholdLabel.textContent = '50m';
-
-    el.progressScreen.hidden = true;
-    el.tabs.hidden = false;
-    el.periodFilter.hidden = false;
-    el.clusterFilter.hidden = false;
-    el.btnSettings.hidden = false;
-    el.mapScreen.hidden = false;
-
-    if (!map) {
-      map = initMap(el.leafletMapDiv);
-      map.on('moveend zoomend', scheduleMuniViewportRedraw);
-    }
-    applyPrivacyZoomLimit(map, state.privacy);
-
-    render();
-    // Every import (not just the first) routes through a privacy-notice
-    // screen and then the exclusion-zone settings screen before the user
-    // starts browsing — pins/rankings/route are visible immediately once
-    // this is skipped, so reviewing HOME/WORK-type suggestions first is a
-    // privacy checkpoint, not a one-time tutorial. The notice screen exists
-    // because the exclusion-zone screen itself necessarily shows precise
-    // home/work-candidate locations — worth a beat of "if you're
-    // screen-sharing or recording, be aware" before that appears. Both
-    // steps are skippable (privacy-notice via "続ける", settings via
-    // "マップへ"/"閉じる" — closeSettings()).
-    el.tabs.hidden = true;
-    el.mapScreen.hidden = true;
-    el.privacyNoticeScreen.hidden = false;
-    refreshRecentFilesList(); // keep the welcome screen's list current for next time
+    await finishLoadingIntoApp();
   } catch (err) {
     el.progressLabel.textContent = '読み込みに失敗しました: ' + err.message;
   } finally {
@@ -489,10 +458,110 @@ async function openFile(explicitPath) {
   }
 }
 
+// issue #21: entry point for people who don't have a Google Timeline export
+// at all — skips straight to plotting linked photos on the map. Populates
+// state.raw with a *shape-valid but empty* stub (real prefecture/municipality
+// reference lists, zero visits/activities/pathPoints/etc.) rather than
+// leaving it null, so every existing state.raw.xxx access in this file (and
+// mapView.mjs's choropleth, which already degrades to an all-grey "no visits"
+// rendering given an empty aggregate) keeps working unmodified. The
+// reference lists specifically (not empty arrays) matter for correctness,
+// not just polish — see finishLoadingIntoApp()'s buildMunicipalityIndex call,
+// which resolvePlaceName() (photo popup/lightbox captions) depends on.
+async function openPhotosOnly() {
+  stopTimelapse();
+  el.welcome.hidden = true;
+  el.progressScreen.hidden = false;
+  el.progressFill.style.width = '0%';
+  el.progressLabel.textContent = '読み込み中...';
+
+  try {
+    const [refLists, prefGeoJSON, muniGeoJSON] = await Promise.all([
+      window.pathBrowser.getReferenceLists(),
+      window.pathBrowser.getPrefectureGeoJSON(),
+      window.pathBrowser.getMunicipalityGeoJSON(),
+      zonesReady,
+    ]);
+    state.raw = {
+      fingerprint: 'photos-only',
+      prefectures: refLists.prefectures,
+      municipalities: refLists.municipalities,
+      visits: [],
+      activities: [],
+      pathPoints: [],
+      pathSegments: [],
+      clusters: [],
+      frequentPlaces: [],
+    };
+    state.photosOnlyMode = true;
+    state.prefGeoJSON = prefGeoJSON;
+    state.muniGeoJSON = muniGeoJSON;
+    state.photoLayerVisible = true; // otherwise the map would show nothing at all until the user finds the toggle
+    await finishLoadingIntoApp();
+  } catch (err) {
+    el.progressLabel.textContent = '読み込みに失敗しました: ' + err.message;
+  }
+}
+
+// Shared tail of openFile()/openPhotosOnly() — everything from here on only
+// cares that state.raw/prefGeoJSON/muniGeoJSON are already assigned, not
+// where they came from.
+async function finishLoadingIntoApp() {
+  state.municipalityByCode = buildMunicipalityIndex(state.raw.municipalities);
+  state.clusterThreshold = 50;
+  applyPhotoEstimates(); // a folder linked before this was open may now gain Stage3 estimates
+  state.history = [{ view: 'national', params: {} }];
+  state.historyIndex = 0;
+  state.filter = { year: null, month: null };
+  state.dismissedSuggestions = new Set();
+  lastMapContext = null;
+
+  populateYearOptions();
+  el.clusterThresholdInput.value = '50';
+  el.clusterThresholdLabel.textContent = '50m';
+
+  el.progressScreen.hidden = true;
+  el.tabs.hidden = false;
+  el.periodFilter.hidden = false;
+  el.clusterFilter.hidden = false;
+  el.btnSettings.hidden = false;
+  el.mapScreen.hidden = false;
+
+  if (!map) {
+    map = initMap(el.leafletMapDiv);
+    map.on('moveend zoomend', scheduleMuniViewportRedraw);
+  }
+  applyPrivacyZoomLimit(map, state.privacy);
+
+  render();
+  // Every import (not just the first) routes through a privacy-notice
+  // screen and then the exclusion-zone settings screen before the user
+  // starts browsing — pins/rankings/route are visible immediately once
+  // this is skipped, so reviewing HOME/WORK-type suggestions first is a
+  // privacy checkpoint, not a one-time tutorial. The notice screen exists
+  // because the exclusion-zone screen itself necessarily shows precise
+  // home/work-candidate locations — worth a beat of "if you're
+  // screen-sharing or recording, be aware" before that appears. Both
+  // steps are skippable (privacy-notice via "続ける", settings via
+  // "マップへ"/"閉じる" — closeSettings()).
+  el.tabs.hidden = true;
+  el.mapScreen.hidden = true;
+  el.privacyNoticeScreen.hidden = false;
+  refreshRecentFilesList(); // keep the welcome screen's list current for next time
+}
+
 function populateYearOptions() {
   const years = new Set();
   for (const v of state.raw.visits) if (v.year) years.add(v.year);
   for (const p of state.raw.pathPoints) if (p[4]) years.add(p[4]);
+  // Also gather years from linked photos' taken-at dates — necessary for 写真
+  // のみモード (where visits/pathPoints are always empty, so without this the
+  // period filter would only ever offer "すべて"), and a straightforward
+  // improvement in normal mode too when a linked photo folder has photos
+  // outside the timeline's own date range.
+  for (const p of state.rawPhotos) {
+    if (p.takenAtMs != null) years.add(new Date(p.takenAtMs).getFullYear());
+  }
   const sorted = [...years].sort();
 
   el.filterYear.innerHTML = '<option value="">すべて</option>' + sorted.map((y) => `<option value="${y}">${y}年</option>`).join('');
@@ -652,6 +721,22 @@ function render() {
 
   el.tabRoute.disabled = state.privacy;
   if (state.privacy && state.tab === 'route') state.tab = 'map';
+
+  // issue #21 (写真のみモード): timeline-derived tabs/controls are
+  // meaningless with zero visits/pathSegments, so they're hidden outright
+  // here rather than shown in an always-empty state (unlike the
+  // privacy-mode route tab above, which stays visible-but-disabled since
+  // there the underlying data still exists, just hidden).
+  el.tabRoute.hidden = state.photosOnlyMode;
+  document.querySelector('.tab-btn[data-tab="chronology"]').hidden = state.photosOnlyMode;
+  document.querySelector('.tab-btn[data-tab="stats"]').hidden = state.photosOnlyMode;
+  el.clusterFilter.hidden = state.photosOnlyMode;
+  el.btnTimelapsePlay.hidden = state.photosOnlyMode;
+  el.btnTimelapseReset.hidden = state.photosOnlyMode;
+  el.photosOnlyBanner.hidden = !state.photosOnlyMode;
+  if (state.photosOnlyMode && (state.tab === 'route' || state.tab === 'chronology' || state.tab === 'stats')) {
+    state.tab = 'map';
+  }
 
   el.btnPhotoToggle.disabled = state.privacy;
   el.btnRoutePhotoToggle.disabled = state.privacy;
@@ -1601,6 +1686,7 @@ function closeSettings() {
 // the file dialog and tries to read the event object itself as a path).
 el.btnOpen.addEventListener('click', () => openFile());
 el.btnOpenMain.addEventListener('click', () => openFile());
+el.btnPhotosOnly.addEventListener('click', () => openPhotosOnly());
 
 el.btnBack.addEventListener('click', () => {
   stopTimelapse();
@@ -1614,12 +1700,22 @@ el.btnForward.addEventListener('click', () => {
 });
 
 function setPrivacy(value) {
+  const wasPrivacyOn = state.privacy;
   state.privacy = value;
   el.btnPrivacy.classList.toggle('off', !state.privacy);
   el.privacyLabel.textContent = state.privacy ? 'プライバシーモード ON' : 'プライバシーモード OFF';
   document.getElementById('privacy-icon').textContent = state.privacy ? '\u{1F512}' : '\u{1F513}';
   if (map) applyPrivacyZoomLimit(map, state.privacy);
   resetNavigationToNational();
+  // issue #21: render()'s own privacy gate (`if (state.privacy) state.photoLayerVisible = false`)
+  // is one-way — once forced false it stays false even after privacy turns
+  // back off. That's fine in normal mode (photos are optional there), but in
+  // 写真のみモード the photo layer *is* the map's whole purpose, so once the
+  // user turns privacy off, show it automatically rather than leaving them
+  // to find the toggle button on an otherwise-empty grey map.
+  if (state.photosOnlyMode && wasPrivacyOn && !value) {
+    state.photoLayerVisible = true;
+  }
   render();
 }
 

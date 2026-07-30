@@ -2,6 +2,7 @@ export function createState() {
   return {
     raw: null, // { prefectures, visits, activities, pathPoints, frequentPlaces }
     prefGeoJSON: null,
+    photosOnlyMode: false, // issue #21: true when raw is app.mjs's openPhotosOnly() stub, not a real parsed timeline
     privacy: true,
     filter: { year: null, month: null },
     tab: 'map',

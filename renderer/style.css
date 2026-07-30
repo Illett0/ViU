@@ -348,6 +348,21 @@ html, body {
   color: var(--color-privacy-on);
   cursor: default;
 }
+
+/* issue #21: shown only in 写真のみモード (state.photosOnlyMode) — full
+   sentence, so unlike the other top-left/top-right pill badges this one is
+   centered and wider. */
+.photos-only-banner {
+  top: 12px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  max-width: 60%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+}
 .island-badge button {
   margin-left: 8px;
 }
