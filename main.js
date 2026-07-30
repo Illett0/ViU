@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Worker } = require('worker_threads');
@@ -11,6 +11,17 @@ const geoCache = require('./lib/geoCache');
 const photoCache = require('./lib/photoCache');
 const thumbnailCache = require('./lib/thumbnailCache');
 
+// Test-only escape hatch, mirroring PATHBROWSER_TEST_FILE/PATHBROWSER_TEST_PHOTO_FOLDER:
+// isolates the E2E suite's on-disk state (recent-files history, exclusion
+// zones, geo/nominatim/photo/thumbnail caches, linked photo folder) from
+// whatever the developer's own Electron profile has accumulated, so repeated
+// `npm run test:e2e` runs start from a clean slate instead of depending on
+// leftover state from a previous run or from real app usage. Must be set
+// before app.whenReady() — userData is read at window/IPC-handler creation.
+if (process.env.PATHBROWSER_TEST_USERDATA) {
+  app.setPath('userData', process.env.PATHBROWSER_TEST_USERDATA);
+}
+
 let mainWindow;
 let prefectureGeoJSONCache = null;
 let municipalityGeoJSONCache = null;
@@ -19,6 +30,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
+    icon: path.join(__dirname, 'build', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -28,6 +40,15 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // target="_blank" links (issue #15's export-instructions guide links to
+  // Google's own timeline/Takeout pages) would otherwise silently do nothing —
+  // Electron denies new-window creation by default unless handled. Route
+  // http(s) links to the OS default browser instead of opening inside the app.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:') || url.startsWith('http:')) shell.openExternal(url);
+    return { action: 'deny' };
+  });
 }
 
 app.whenReady().then(() => {
@@ -154,7 +175,7 @@ ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) 
 // Nominatim reverse-geocode labels, scanned photo metadata, generated
 // thumbnails). Does NOT touch recent-files history, backups, exclusion
 // zones, or the linked photo folder itself — those are user data/settings,
-// not caches, and this button is scoped to "make PathBrowser recompute from
+// not caches, and this button is scoped to "make ViU recompute from
 // scratch" only.
 ipcMain.handle('cache:clear', async () => {
   const userDataPath = app.getPath('userData');
@@ -313,7 +334,7 @@ ipcMain.handle('timeline:export-png', async (event, rect) => {
 
   const result = await dialog.showSaveDialog(mainWindow, {
     title: '制覇マップをPNGで保存',
-    defaultPath: 'pathbrowser-map.png',
+    defaultPath: 'viu-map.png',
     filters: [{ name: 'PNG画像', extensions: ['png'] }],
   });
   if (result.canceled || !result.filePath) return null;

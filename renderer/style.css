@@ -57,6 +57,13 @@ html, body {
   color: var(--color-accent);
 }
 
+#app-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
 #breadcrumb {
   flex: 1;
   text-align: center;
@@ -741,6 +748,8 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   flex-direction: column;
   gap: 8px;
   margin-bottom: 16px;
+  max-height: 260px;
+  overflow-y: auto;
 }
 .zone-suggestion {
   display: flex;
@@ -891,6 +900,36 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
 #photo-scan-progress {
   max-width: 400px;
   margin: 8px 0;
+}
+
+/* issue #15: in-app export instructions (welcome screen: timeline JSON;
+   settings' 写真連携 section: Google Photos Takeout), collapsed by default
+   so they don't compete with the primary action for someone who already has
+   their export ready. */
+.export-guide {
+  max-width: 480px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--color-text-dim);
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 16px;
+}
+.export-guide summary {
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: 13px;
+}
+.export-guide[open] summary { margin-bottom: 8px; }
+.export-guide p, .export-guide ol { margin: 8px 0; line-height: 1.7; }
+.export-guide ol { padding-left: 20px; }
+.export-guide a { color: var(--color-accent); }
+.export-guide code {
+  background: var(--color-bg);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 12px;
 }
 
 /* Individual photo pins use the map's marker pane sizing; the cluster

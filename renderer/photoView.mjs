@@ -70,16 +70,32 @@ function popupHtml(photo, placeName) {
 // even on a smallish window (Leaflet auto-pans the popup into view).
 const GALLERY_POPUP_WIDTH = 408;
 
-function galleryHtml(photos) {
+// Issue #24 made a single click open the gallery for a cluster of *any*
+// size, no more staged zoom-in first — which previously kept clusters small
+// by the time their gallery could ever open. `photos:get-thumbnail` (main.js)
+// decodes/resizes/encodes each image on the main process thread (Electron's
+// nativeImage isn't usable off it), so a big, loosely-zoomed cluster could
+// fire dozens/hundreds of thumbnail requests at once and visibly freeze the
+// whole app on that first click. GALLERY_FETCH_CONCURRENCY bounds how many
+// are ever in flight together; MAX_GALLERY_PHOTOS caps the truly pathological
+// case (hundreds of photos in one loosely-clustered group).
+export const MAX_GALLERY_PHOTOS = 80;
+const GALLERY_FETCH_CONCURRENCY = 4;
+
+export function galleryHtml(photos, totalCount) {
   const thumbs = photos
     .map(
       (photo, i) =>
         `<div class="photo-cluster-popup-thumb-wrap${photo.source === 'estimated' ? ' photo-cluster-popup-thumb-wrap--estimated' : ''}" data-index="${i}" title="${photo.source === 'estimated' ? '推定位置の写真' : ''}"><span class="photo-popup-loading">…</span></div>`
     )
     .join('');
+  const countLabel =
+    totalCount > photos.length
+      ? `${photos.length}枚を表示中（他${totalCount - photos.length}枚 — ズームインして絞り込んでください）`
+      : `${photos.length}枚の写真`;
   return `
     <div class="photo-cluster-popup">
-      <div class="photo-cluster-popup-count">${photos.length}枚の写真</div>
+      <div class="photo-cluster-popup-count">${countLabel}</div>
       <div class="photo-cluster-popup-grid">${thumbs}</div>
     </div>`;
 }
@@ -89,8 +105,47 @@ function galleryHtml(photos) {
 // pin individually — the default leaflet.markercluster behavior becomes
 // unusable once several photos share (near-)identical coordinates (e.g.
 // burst shots), since spiderfied pins at max zoom end up stacked and tiny.
-function openClusterGallery(map, latlng, photos, { onOpenLightbox } = {}) {
-  if (!photos || photos.length === 0) return;
+// Fixed-size worker pool over `photos`, fetching each one's thumbnail and
+// filling in the matching `.photo-cluster-popup-thumb-wrap[data-index]`
+// inside `containerEl` (expected to already contain `galleryHtml`'s markup)
+// — instead of firing every fetch at once. Bounds how many
+// photos:get-thumbnail IPC calls (and their main-thread image
+// decode/resize/encode work) are in flight together. Returns a `cancel()`
+// callers must invoke once containerEl is no longer visible/attached, so no
+// further fetches populate a dead element.
+export function loadGalleryThumbnails(containerEl, photos, { onOpenLightbox } = {}) {
+  let cancelled = false;
+  let nextIndex = 0;
+  async function fetchNext() {
+    if (cancelled) return;
+    const i = nextIndex++;
+    if (i >= photos.length) return;
+    const photo = photos[i];
+    const wrap = containerEl.querySelector(`.photo-cluster-popup-thumb-wrap[data-index="${i}"]`);
+    if (wrap) {
+      const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
+      if (cancelled) return;
+      if (result && result.dataUrl) {
+        wrap.innerHTML = `<img src="${result.dataUrl}" alt="" />`;
+        wrap.addEventListener('click', () => {
+          if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
+        });
+      } else {
+        wrap.innerHTML = '<span class="photo-popup-unsupported">非対応</span>';
+      }
+    }
+    await fetchNext();
+  }
+  const workerCount = Math.min(GALLERY_FETCH_CONCURRENCY, photos.length);
+  for (let w = 0; w < workerCount; w++) fetchNext();
+  return () => {
+    cancelled = true;
+  };
+}
+
+function openClusterGallery(map, latlng, allPhotos, { onOpenLightbox } = {}) {
+  if (!allPhotos || allPhotos.length === 0) return;
+  const photos = allPhotos.slice(0, MAX_GALLERY_PHOTOS);
 
   // minWidth is what actually sizes the popup: the grid's 1fr columns and
   // width:100% thumbnails never push the content wider on their own, so
@@ -98,24 +153,14 @@ function openClusterGallery(map, latlng, photos, { onOpenLightbox } = {}) {
   // tiny (issue #17).
   const popup = L.popup({ minWidth: GALLERY_POPUP_WIDTH, maxWidth: GALLERY_POPUP_WIDTH })
     .setLatLng(latlng)
-    .setContent(galleryHtml(photos))
+    .setContent(galleryHtml(photos, allPhotos.length))
     .openOn(map);
 
   const popupEl = popup.getElement();
   if (!popupEl) return;
-  photos.forEach(async (photo, i) => {
-    const wrap = popupEl.querySelector(`.photo-cluster-popup-thumb-wrap[data-index="${i}"]`);
-    if (!wrap) return;
-    const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
-    if (result && result.dataUrl) {
-      wrap.innerHTML = `<img src="${result.dataUrl}" alt="" />`;
-      wrap.addEventListener('click', () => {
-        if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
-      });
-    } else {
-      wrap.innerHTML = '<span class="photo-popup-unsupported">非対応</span>';
-    }
-  });
+
+  const cancel = loadGalleryThumbnails(popupEl, photos, { onOpenLightbox });
+  popup.on('remove', cancel);
 }
 
 export function clearPhotoLayer(map, layerRef) {
@@ -128,7 +173,13 @@ export function clearPhotoLayer(map, layerRef) {
 
 function createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox } = {}) {
   const estimated = photo.source === 'estimated';
-  const marker = L.circleMarker([photo.lat, photo.lng], {
+  // `plotLat`/`plotLng` (see app.mjs's nudgePhotosAwayFromPins), when present,
+  // are a few pixels away from the photo's true coordinates — applied only
+  // when this photo would otherwise land pixel-exact on a 滞在地点 pin, which
+  // always wins that overlap (issue #23) and would leave the photo
+  // permanently unclickable on the map. Only the plotted position moves;
+  // `photo.lat`/`lng` below (popup metadata, resolvePlaceName) stay the real ones.
+  const marker = L.circleMarker([photo.plotLat ?? photo.lat, photo.plotLng ?? photo.lng], {
     radius: 7,
     color: PHOTO_MARKER_BORDER,
     weight: 2,
@@ -204,21 +255,14 @@ export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOp
         }),
     });
     layerRef.layer.on('clusterclick', (e) => {
-      // Compare against the zoom fitBounds would actually land on for this
-      // cluster's own bounds, not the map's absolute max zoom — fitBounds
-      // jumps straight to its target zoom rather than stepping in, so a
-      // cluster whose real-world spread fits at, say, zoom 16 would
-      // otherwise re-fit to that same zoom 16 on every click forever,
-      // never reaching the map max and never opening the gallery. This hit
-      // GPS-tagged photo clusters especially hard (their pins are spread
-      // over real walking distance, unlike same-coordinate 推定/estimated
-      // pins whose zero-size bounds happened to fit-zoom straight to max).
-      const bounds = e.layer.getBounds().pad(0.5);
-      const targetZoom = map.getBoundsZoom(bounds);
-      if (targetZoom > map.getZoom()) {
-        map.fitBounds(bounds);
-        return;
-      }
+      // Always open the gallery directly on the first click (issue #24).
+      // This used to zoom in one step per click until the cluster's own
+      // bounds fit the viewport, only opening the gallery once no further
+      // zoom-in was possible — for a loosely-spread cluster (e.g. a few
+      // photos taken while walking) that could take 3+ clicks to reach the
+      // gallery, which read as the cluster simply not responding to clicks
+      // rather than zooming. The map's zoom level is left untouched here;
+      // the gallery already shows every photo in the cluster regardless.
       const photos = e.layer.getAllChildMarkers().map((m) => m.photo).filter(Boolean);
       openClusterGallery(map, e.layer.getLatLng(), photos, { onOpenLightbox });
     });
@@ -232,7 +276,19 @@ export function renderPhotoLayer(map, layerRef, photos, { resolvePlaceName, onOp
 
   for (const photo of photos) {
     nextPaths.add(photo.filePath);
-    if (markersByPath.has(photo.filePath)) continue; // Unchanged since last render — leave its marker (and any open popup) alone.
+    const targetLat = photo.plotLat ?? photo.lat;
+    const targetLng = photo.plotLng ?? photo.lng;
+    const existing = markersByPath.get(photo.filePath);
+    if (existing) {
+      const cur = existing.getLatLng();
+      if (cur.lat === targetLat && cur.lng === targetLng) continue; // Unchanged since last render — leave its marker (and any open popup) alone.
+      // plotLat/plotLng shifted (e.g. the map zoomed/panned enough to change
+      // whether this photo needs nudging away from a stay-point pin) — rebuilt
+      // rather than moved in place, since leaflet.markercluster's spatial index
+      // isn't guaranteed to stay consistent after repositioning a member marker.
+      cluster.removeLayer(existing);
+      markersByPath.delete(photo.filePath);
+    }
     const marker = createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox });
     cluster.addLayer(marker);
     markersByPath.set(photo.filePath, marker);

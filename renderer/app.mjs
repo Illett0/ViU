@@ -11,7 +11,7 @@ import {
   clearMarkers,
 } from './mapView.mjs';
 import { initRouteMap, renderRoute, clearRoute, colorForMode } from './routeView.mjs';
-import { renderPhotoLayer, clearPhotoLayer } from './photoView.mjs';
+import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, MAX_GALLERY_PHOTOS } from './photoView.mjs';
 import { renderStats, modeLabel, formatDuration } from './statsView.mjs';
 import { initZoneMap, renderZoneCircles, renderPendingCircle, renderZoneList, renderSuggestions } from './settingsView.mjs';
 import { renderChronology } from './chronologyView.mjs';
@@ -22,6 +22,7 @@ import {
   filterByPeriod,
   filterUpToPeriod,
   distanceMeters,
+  destinationPoint,
   computePrefectureAggregates,
   computeMunicipalityAggregates,
   computeConquestRates,
@@ -152,6 +153,7 @@ const dayViewLayerRef = { layer: null };
 const dayViewMarkerLayerRef = { layer: null };
 let zoneMap = null;
 let lastMapContext = null; // tracks view+granularity so we only fitBounds on real navigation, not on every pan/zoom redraw
+let placeGalleryCancel = null; // cancels the previous renderPlaceDetail's in-flight thumbnail fetches (photosForPlace gallery)
 let pendingZoneCenter = null;
 const geojsonLayerRef = { layer: null };
 const photoLayerRef = { layer: null }; // 制覇マップ側の写真レイヤー
@@ -185,7 +187,7 @@ const zonesReady = window.pathBrowser.getZones().then((zones) => {
 });
 
 window.pathBrowser.getAppVersion().then((version) => {
-  el.settingsVersion.textContent = `PathBrowser v${version}`;
+  el.settingsVersion.textContent = `ViU v${version}`;
 });
 
 // ---------- Recent files (welcome screen) ----------
@@ -277,6 +279,21 @@ function photoMatchesPeriod(photo) {
 function getVisiblePhotos() {
   if (state.privacy) return []; // Photo layer is disabled entirely under privacy mode, like the route map.
   return state.photos.filter((p) => photoMatchesPeriod(p) && !isInAnyZone(p.lat, p.lng, state.zones));
+}
+
+// Stage 4 (issue #2): photos to show inline in a 滞在地点's detail panel —
+// "at this place" is defined the same way the map's own photo-pin nudging
+// (nudgePhotosAwayFromPins) treats "same spot as this pin": within
+// state.clusterThreshold meters of *any* of the place's own visit
+// coordinates, not just one representative point, since a single cluster can
+// contain several distinct-but-nearby exact coordinates (that's why they were
+// clustered together in the first place).
+function photosForPlace(memberVisits) {
+  if (!memberVisits.length) return [];
+  const photos = getVisiblePhotos();
+  if (!photos.length) return [];
+  const triggerMeters = state.clusterThreshold;
+  return photos.filter((photo) => memberVisits.some((v) => distanceMeters(photo.lat, photo.lng, v.lat, v.lng) <= triggerMeters));
 }
 
 function openPhotoLightbox(dataUrl, photo) {
@@ -736,6 +753,65 @@ function scheduleMuniViewportRedraw() {
   });
 }
 
+// A 滞在地点 pin always wins a pixel-exact overlap with a photo pin (see
+// mapView.mjs's clusterMarkerPane/photoMarkerPane z-order, issue #23), so a
+// photo whose real coordinates sit right on a stay-point pin needs *some*
+// nudge or it's permanently hidden on the map. This used to nudge by a fixed
+// *screen-pixel* distance so the visual gap stayed constant at any zoom —
+// but that meant the real-world displacement it introduced scaled with zoom
+// too: at a zoomed-out view (a whole prefecture/country), a 30px nudge could
+// relocate a photo's plotted position by kilometers, badly misrepresenting
+// where it was actually taken. Accuracy takes priority over guaranteed
+// click-separation here: the nudge is now a small FIXED real-world distance
+// (~10m — GPS-noise scale, not a visible relocation) regardless of zoom.
+// Only the *plotted* position moves; photo.lat/lng (popup metadata,
+// resolvePlaceName) are left untouched — see photoView.mjs's createPhotoMarker.
+//
+// One consequence: at a typical place-level zoom, 10m can be just a couple
+// of screen pixels, so a nudged photo may still render effectively behind
+// its stay pin and not be independently clickable there — same as if this
+// function didn't exist. That's an accepted trade-off, not a bug: zooming in
+// further separates them, and the place-detail panel's own photo gallery
+// (Stage 4, issue #2 — see photosForPlace) already surfaces exactly these
+// photos without depending on the map pin being clickable at all.
+//
+// The trigger threshold (15m) intentionally stays well under the minimum
+// possible `state.clusterThreshold` (20m, the slider's floor) — this app's
+// own visit-clustering radius — so a photo within it is essentially
+// guaranteed to belong to the *same* stay cluster as its nearest pin, not a
+// merely-nearby-but-distinct one (see lib/cluster.js's union-find over that
+// same distance). No need to reference state.clusterThreshold directly.
+const PHOTO_NUDGE_TRIGGER_METERS = 15;
+const PHOTO_NUDGE_DISTANCE_METERS = 10;
+function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
+  if (!stayPinLatLngs.length || !photos.length) return photos;
+  return photos.map((photo) => {
+    let nearestPin = null;
+    let nearestMeters = Infinity;
+    for (const pin of stayPinLatLngs) {
+      const d = distanceMeters(photo.lat, photo.lng, pin.lat, pin.lng);
+      if (d < nearestMeters) {
+        nearestMeters = d;
+        nearestPin = pin;
+      }
+    }
+    if (!nearestPin || nearestMeters > PHOTO_NUDGE_TRIGGER_METERS) return photo;
+
+    // Direction "away from the pin" is undefined at exact overlap (the
+    // common case — identical GPS coordinate), so fall back to a fixed
+    // bearing (north). This is a cosmetic direction at a ~10m scale, so the
+    // usual longitude/latitude-scaling correction for bearing isn't needed.
+    let bearingDeg = 0;
+    if (nearestMeters > 0.5) {
+      const dLat = photo.lat - nearestPin.lat;
+      const dLng = photo.lng - nearestPin.lng;
+      bearingDeg = (Math.atan2(dLng, dLat) * 180) / Math.PI;
+    }
+    const nudged = destinationPoint(nearestPin.lat, nearestPin.lng, bearingDeg, PHOTO_NUDGE_DISTANCE_METERS);
+    return { ...photo, plotLat: nudged.lat, plotLng: nudged.lng };
+  });
+}
+
 function renderMapTab(derived) {
   const view = currentView(state);
   // clusterId/muniCode are included so that switching between two different
@@ -775,6 +851,14 @@ function renderMapTab(derived) {
       state.prefGeoJSON,
       derived.periodAggregates,
       (code) => {
+        // The backdrop covers the entire visible map under a 'place' view,
+        // while the actual 滞在地点 pin the user is looking at is a small
+        // circle floating on top of it — any click that merely misses the
+        // pin (i.e. most of the screen) lands here instead. When `code` is
+        // the prefecture already selected, that's not a "switch prefecture"
+        // gesture, it's a misclick, so it must not reset the drilled-down
+        // place selection back to the bare prefecture ranking.
+        if (code === selectedCode) return;
         navigateTo(state, 'prefecture', { code });
         render();
       },
@@ -851,7 +935,11 @@ function renderMapTab(derived) {
   }
 
   if (state.photoLayerVisible) {
-    renderPhotoLayer(map, photoLayerRef, getVisiblePhotos(), { resolvePlaceName, onOpenLightbox: openPhotoLightbox });
+    const stayPinLatLngs = view.view === 'national' ? [] : [...currentMarkersByKey.values()].map((m) => m.getLatLng());
+    renderPhotoLayer(map, photoLayerRef, nudgePhotosAwayFromPins(getVisiblePhotos(), stayPinLatLngs), {
+      resolvePlaceName,
+      onOpenLightbox: openPhotoLightbox,
+    });
   } else {
     clearPhotoLayer(map, photoLayerRef);
   }
@@ -994,7 +1082,22 @@ function wireBackLink() {
   const btn = el.detailPanelContent.querySelector('[data-nav="back"]');
   if (btn) {
     btn.addEventListener('click', () => {
-      goBack(state);
+      // Deliberately NOT goBack(state): the label ("← 都道府県に戻る" /
+      // "← 日本地図に戻る") promises a specific hierarchy-parent destination,
+      // but goBack() just pops the shared linear history stack, which can
+      // also be pushed to from unrelated entry points (Chronology tab,
+      // breadcrumbs, the Stats-tab map jump) — so "back" could land
+      // somewhere that isn't this view's parent at all. Navigate to the
+      // computed parent directly instead. 'place' always belongs to its
+      // prefecture (municipality-granularity 'place' still reuses the same
+      // prefecture map, see renderMapTab), and 'prefecture' always belongs
+      // to the national view.
+      const view = currentView(state);
+      if (view.view === 'place') {
+        navigateTo(state, 'prefecture', { code: view.params.code });
+      } else if (view.view === 'prefecture') {
+        navigateTo(state, 'national', {});
+      }
       render();
     });
   }
@@ -1109,6 +1212,11 @@ function renderPlaceDetail(derived, params) {
   const prefEntry = derived.periodAggregates.get(code);
   const parts = [];
 
+  if (placeGalleryCancel) {
+    placeGalleryCancel();
+    placeGalleryCancel = null;
+  }
+
   const backLabel = state.granularity === 'municipality' ? '市区町村マップに戻る' : '都道府県に戻る';
   parts.push(`<button class="back-link" data-nav="back">← ${backLabel}</button>`);
 
@@ -1142,11 +1250,24 @@ function renderPlaceDetail(derived, params) {
         .join('')
     );
 
+    // Stage 4 (issue #2): inline photo gallery for this place, reusing the
+    // exact same grid markup/thumbnail-loading/lightbox as the map's photo
+    // cluster popup (photoView.mjs) for visual and behavioral consistency.
+    const allPlacePhotos = photosForPlace(memberVisits);
+    const placePhotos = allPlacePhotos.slice(0, MAX_GALLERY_PHOTOS);
+    if (placePhotos.length > 0) {
+      parts.push('<h3 style="margin-top:16px;">この場所の写真</h3>');
+      parts.push(galleryHtml(placePhotos, allPlacePhotos.length));
+    }
+
     el.detailPanelContent.innerHTML = parts.join('');
     wireBackLink();
     el.detailPanelContent.querySelectorAll('.day-item[data-date]').forEach((elDay) => {
       elDay.addEventListener('click', () => openDayView(elDay.dataset.date));
     });
+    if (placePhotos.length > 0) {
+      placeGalleryCancel = loadGalleryThumbnails(el.detailPanelContent, placePhotos, { onOpenLightbox: openPhotoLightbox });
+    }
 
     if (modal) {
       const gen = state.renderGen;
@@ -1350,12 +1471,20 @@ function resetTimelapse() {
 
 // ---------- Settings / exclusion zones ----------
 
+// Google純正のHOME/WORKラベル（state.raw.frequentPlaces）は、Googleのタイムライン
+// エクスポート自体が通常1件ずつしか付与しないため、それ以外にも自宅・職場・その他
+// 人に見られたくない場所である可能性がある地点を候補として出せるよう、訪問回数
+// 上位N件をそれぞれ個別に提案する（issue #14）。
+const NUM_TOP_PLACE_SUGGESTIONS = 10;
+
 function computeSuggestions() {
   if (!state.raw) return [];
   const suggestions = [];
+  const homeWorkPoints = []; // 上位N件の候補から、既にHOME/WORKとして提案済みの地点を除外するための重複判定用
   for (const p of state.raw.frequentPlaces || []) {
     if (p.label !== 'HOME' && p.label !== 'WORK') continue;
     if (isInAnyZone(p.lat, p.lng, state.zones)) continue;
+    homeWorkPoints.push({ lat: p.lat, lng: p.lng, radiusMeters: 300 });
     const key = 'freq:' + (p.placeId || `${p.lat},${p.lng}`);
     if (state.dismissedSuggestions.has(key)) continue;
     const name = municipalityName(state.municipalityByCode, nearestMunicipalityCode(p.lat, p.lng));
@@ -1368,20 +1497,24 @@ function computeSuggestions() {
     });
   }
 
-  const allRanking = computeClusterRanking(applyPrivacy(state.raw, false), { privacy: false, municipalityByCode: state.municipalityByCode, limit: 1 });
-  if (allRanking.length > 0) {
-    const top = allRanking[0];
-    const key = 'top:' + top.clusterId;
-    if (!isInAnyZone(top.lat, top.lng, state.zones) && !state.dismissedSuggestions.has(key)) {
-      suggestions.push({
-        key,
-        text: `最も滞在回数が多い地点（${top.muniName}、${top.count}回、自宅の可能性があります）を除外ゾーンに登録しますか？（半径300m）`,
-        lat: top.lat,
-        lng: top.lng,
-        radiusMeters: 300,
-      });
-    }
-  }
+  const allRanking = computeClusterRanking(applyPrivacy(state.raw, false), {
+    privacy: false,
+    municipalityByCode: state.municipalityByCode,
+    limit: NUM_TOP_PLACE_SUGGESTIONS,
+  });
+  allRanking.forEach((row, i) => {
+    if (isInAnyZone(row.lat, row.lng, state.zones)) return;
+    if (isInAnyZone(row.lat, row.lng, homeWorkPoints)) return; // 上のHOME/WORK提案と同一地点なら重複表示しない
+    const key = 'top:' + row.clusterId;
+    if (state.dismissedSuggestions.has(key)) return;
+    suggestions.push({
+      key,
+      text: `よく訪れる地点（訪問回数 ${i + 1}位、${row.muniName}、${row.count}回）を除外ゾーンに登録しますか？自宅・職場など人に見られたくない場所の可能性がある場合にご利用ください（半径300m）`,
+      lat: row.lat,
+      lng: row.lng,
+      radiusMeters: 300,
+    });
+  });
   return suggestions;
 }
 
@@ -1658,6 +1791,15 @@ window.__pathBrowserTest = {
   getVisitedPrefectures() {
     return [...getDerived().periodAggregates.values()].filter((e) => e.stayCount > 0 || e.firstEpoch != null);
   },
+  // Pans/zooms the underlying Leaflet map to a prefecture's bounds without
+  // changing state.view — unlike goToPrefecture, this stays in the national
+  // coverage-map/timelapse view (aggregate coloring for all of Japan keeps
+  // animating), it just moves the camera. Useful for framing the timelapse
+  // playback on a specific region instead of the full-country zoom level.
+  panToPrefectureBounds(code) {
+    const feature = state.prefGeoJSON.features.find((f) => f.properties.code === code);
+    if (feature) map.fitBounds(mainlandBounds(feature), { padding: [20, 20] });
+  },
   getMunicipalityAggregates() {
     return [...getDerived().muniAggregates.values()].filter((e) => e.stayCount > 0);
   },
@@ -1674,6 +1816,21 @@ window.__pathBrowserTest = {
   getMapZoom() {
     return map ? { zoom: map.getZoom(), center: map.getCenter(), context: lastMapContext } : null;
   },
+  getView() {
+    return currentView(state);
+  },
+  // Converts a known fixture lat/lng into page (viewport) pixel coordinates,
+  // so E2E tests can dispatch a real mouse click at an exact map location
+  // (e.g. to hit a specific 滞在地点 pin, or a backdrop point known to fall
+  // inside a given prefecture's polygon) instead of guessing pixel offsets —
+  // real Leaflet click-handling/z-order bugs (see mapView.mjs) can only be
+  // exercised via genuine mouse events, not by calling goToPrefecture/goToPlace.
+  latLngToPoint(lat, lng) {
+    if (!map) return null;
+    const pt = map.latLngToContainerPoint([lat, lng]);
+    const rect = el.leafletMapDiv.getBoundingClientRect();
+    return { x: rect.left + pt.x, y: rect.top + pt.y };
+  },
   // Bypasses the actual folder-scan flow (real GPS-tagged photo files aren't
   // available in a test/CI context) so the photo-layer rendering path itself
   // can still be exercised end-to-end.
@@ -1686,6 +1843,17 @@ window.__pathBrowserTest = {
       map: photoLayerRef.markersByPath ? photoLayerRef.markersByPath.size : 0,
       route: routePhotoLayerRef.markersByPath ? routePhotoLayerRef.markersByPath.size : 0,
     };
+  },
+  // Actual plotted position of each photo marker on the 制覇マップ (post
+  // nudgePhotosAwayFromPins) — lets E2E tests click exactly on a photo even
+  // when it's been nudged away from its true coordinates to clear a
+  // coincident 滞在地点 pin (issue #23).
+  getPhotoMarkerLatLngs() {
+    if (!photoLayerRef.markersByPath) return [];
+    return [...photoLayerRef.markersByPath.entries()].map(([filePath, marker]) => {
+      const ll = marker.getLatLng();
+      return { filePath, lat: ll.lat, lng: ll.lng };
+    });
   },
   togglePhotoLayer,
 };

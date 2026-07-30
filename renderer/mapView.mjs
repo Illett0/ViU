@@ -79,8 +79,20 @@ export function initMap(containerEl) {
   // always hit-test above any polygon layer, regardless of which one was
   // most recently recreated — more robust than relying on bringToFront()
   // call ordering between renders.
+  // Above photoMarkerPane (640, see photoView.mjs's ensurePhotoPane), not just
+  // above the default overlayPane (400) — a 滞在地点 pin must stay clickable
+  // even when a GPS-tagged photo sits at (or very near) the same coordinates.
+  // This used to only elevate whichever pin was already selected/drilled
+  // into, but that left a chicken-and-egg deadlock: the *first* click that
+  // selects such a pin happens while nothing is selected yet, so the pin
+  // wasn't elevated at the moment it needed to be, and the click landed on
+  // the photo instead — the place could never be reached via the map at all
+  // (issue #23). Elevating every 滞在地点 pin unconditionally avoids that;
+  // the tradeoff is that a photo exactly coincident with a stay-point pin
+  // can't be clicked directly on the map (still reachable via the photo
+  // cluster gallery/other pins nearby).
   map.createPane('clusterMarkerPane');
-  map.getPane('clusterMarkerPane').style.zIndex = 620;
+  map.getPane('clusterMarkerPane').style.zIndex = 645;
 
   return map;
 }
@@ -312,19 +324,20 @@ export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labe
   const markersByKey = new Map();
 
   for (const row of rows) {
+    const key = row.clusterId ?? 'muni:' + row.muniCode;
     const marker = L.circleMarker([row.lat, row.lng], {
       radius: 6 + Math.min(10, Math.log1p(row.count) * 3),
       color: MARKER_BORDER_COLOR,
       weight: 2,
       fillColor: MARKER_FILL_COLOR,
       fillOpacity: 0.9,
-      // Own pane (see initMap) with a higher z-index than the default
-      // overlayPane polygons render into — guarantees this pin is always on
-      // top and clickable, regardless of which polygon layer was most
-      // recently torn down and rebuilt on top of it in DOM order.
+      // Own pane (see initMap) with a higher z-index than both the default
+      // overlayPane polygons and the photo layer render into — guarantees
+      // this pin is always on top and clickable, regardless of which
+      // polygon layer was most recently torn down and rebuilt on top of it
+      // in DOM order, and regardless of a coincident GPS-tagged photo pin.
       pane: 'clusterMarkerPane',
     });
-    const key = row.clusterId ?? 'muni:' + row.muniCode;
     const labelEntry = labelCache && row.clusterId != null ? labelCache.get(row.clusterId) : null;
     const nameLabel = row.muniName ? formatPlaceLabel(row.muniName, labelEntry) : '';
     marker.bindTooltip(`${nameLabel ? nameLabel + ' — ' : ''}滞在 ${row.count} 回`);
@@ -345,7 +358,24 @@ export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labe
   // meant for the pins underneath — the "訪問地点選択中に他の地点がクリックできない"
   // bug. Explicitly re-stacking every marker above whatever polygons exist
   // *this render* fixes it regardless of creation order.
-  markerLayerRef.layer.eachLayer((l) => l.bringToFront());
+  //
+  // Order matters here beyond "above the polygons", though: bringToFront
+  // moves each marker's DOM node to the end of its pane in call order, so
+  // the *last* marker processed ends up visually and interactively on top of
+  // any other marker it overlaps. `rows` is sorted by count/dwellMs
+  // descending (computeClusterRanking), so iterating it in that order calls
+  // bringToFront on the biggest pin first and the smallest pin last — which
+  // put the *smallest*, least-relevant pin on top wherever two 滞在地点
+  // markers were close enough to overlap on screen, silently stealing clicks
+  // meant for the bigger/more-visited pin underneath. Iterating by ascending
+  // count instead makes the biggest pin win that overlap, independent of
+  // whatever order `rows` happens to be sorted in for the ranking list.
+  [...rows]
+    .sort((a, b) => a.count - b.count)
+    .forEach((row) => {
+      const marker = markersByKey.get(row.clusterId ?? 'muni:' + row.muniCode);
+      if (marker) marker.bringToFront();
+    });
 
   return markersByKey;
 }

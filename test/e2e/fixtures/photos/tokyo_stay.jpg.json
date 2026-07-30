@@ -1,0 +1,9 @@
+{
+  "title": "tokyo_stay.jpg",
+  "description": "",
+  "imageViews": "0",
+  "creationTime": { "timestamp": "1704411000", "formatted": "Jan 5, 2024, 8:30:00 AM UTC+9" },
+  "photoTakenTime": { "timestamp": "1704411000", "formatted": "Jan 5, 2024, 8:30:00 AM UTC+9" },
+  "geoData": { "latitude": 35.6812000, "longitude": 139.7671000, "altitude": 0.0, "latitudeSpan": 0.0, "longitudeSpan": 0.0 },
+  "geoDataExif": { "latitude": 35.6812000, "longitude": 139.7671000, "altitude": 0.0, "latitudeSpan": 0.0, "longitudeSpan": 0.0 }
+}
