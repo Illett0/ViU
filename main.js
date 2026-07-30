@@ -10,6 +10,8 @@ const recentFiles = require('./lib/recentFiles');
 const geoCache = require('./lib/geoCache');
 const photoCache = require('./lib/photoCache');
 const thumbnailCache = require('./lib/thumbnailCache');
+const { getPrefectureList } = require('./lib/prefectures');
+const { getMunicipalityList } = require('./lib/municipalities');
 
 // Test-only escape hatch, mirroring PATHBROWSER_TEST_FILE/PATHBROWSER_TEST_PHOTO_FOLDER:
 // isolates the E2E suite's on-disk state (recent-files history, exclusion
@@ -81,6 +83,16 @@ ipcMain.handle('timeline:get-municipality-geojson', async () => {
     municipalityGeoJSONCache = JSON.parse(raw);
   }
   return municipalityGeoJSONCache;
+});
+
+// issue #21 (写真のみモード): lets the renderer populate state.raw.prefectures/
+// municipalities without ever parsing a timeline file, so breadcrumb names,
+// 市区町村制覇率 denominators, and photo place-name lookups (all of which key
+// off these lists — see renderer/app.mjs's buildMunicipalityIndex) keep
+// working correctly with zero visit data. Cheap, disk-cached-in-memory reads
+// (lib/prefectures.js / lib/municipalities.js), no worker thread needed.
+ipcMain.handle('timeline:get-reference-lists', async () => {
+  return { prefectures: getPrefectureList(), municipalities: getMunicipalityList() };
 });
 
 ipcMain.handle('timeline:choose-file', async () => {
