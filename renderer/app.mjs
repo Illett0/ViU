@@ -11,7 +11,7 @@ import {
   clearMarkers,
 } from './mapView.mjs';
 import { initRouteMap, renderRoute, clearRoute, colorForMode } from './routeView.mjs';
-import { renderPhotoLayer, clearPhotoLayer } from './photoView.mjs';
+import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, MAX_GALLERY_PHOTOS } from './photoView.mjs';
 import { renderStats, modeLabel, formatDuration } from './statsView.mjs';
 import { initZoneMap, renderZoneCircles, renderPendingCircle, renderZoneList, renderSuggestions } from './settingsView.mjs';
 import { renderChronology } from './chronologyView.mjs';
@@ -22,6 +22,7 @@ import {
   filterByPeriod,
   filterUpToPeriod,
   distanceMeters,
+  destinationPoint,
   computePrefectureAggregates,
   computeMunicipalityAggregates,
   computeConquestRates,
@@ -152,6 +153,7 @@ const dayViewLayerRef = { layer: null };
 const dayViewMarkerLayerRef = { layer: null };
 let zoneMap = null;
 let lastMapContext = null; // tracks view+granularity so we only fitBounds on real navigation, not on every pan/zoom redraw
+let placeGalleryCancel = null; // cancels the previous renderPlaceDetail's in-flight thumbnail fetches (photosForPlace gallery)
 let pendingZoneCenter = null;
 const geojsonLayerRef = { layer: null };
 const photoLayerRef = { layer: null }; // 制覇マップ側の写真レイヤー
@@ -277,6 +279,21 @@ function photoMatchesPeriod(photo) {
 function getVisiblePhotos() {
   if (state.privacy) return []; // Photo layer is disabled entirely under privacy mode, like the route map.
   return state.photos.filter((p) => photoMatchesPeriod(p) && !isInAnyZone(p.lat, p.lng, state.zones));
+}
+
+// Stage 4 (issue #2): photos to show inline in a 滞在地点's detail panel —
+// "at this place" is defined the same way the map's own photo-pin nudging
+// (nudgePhotosAwayFromPins) treats "same spot as this pin": within
+// state.clusterThreshold meters of *any* of the place's own visit
+// coordinates, not just one representative point, since a single cluster can
+// contain several distinct-but-nearby exact coordinates (that's why they were
+// clustered together in the first place).
+function photosForPlace(memberVisits) {
+  if (!memberVisits.length) return [];
+  const photos = getVisiblePhotos();
+  if (!photos.length) return [];
+  const triggerMeters = state.clusterThreshold;
+  return photos.filter((photo) => memberVisits.some((v) => distanceMeters(photo.lat, photo.lng, v.lat, v.lng) <= triggerMeters));
 }
 
 function openPhotoLightbox(dataUrl, photo) {
@@ -737,49 +754,37 @@ function scheduleMuniViewportRedraw() {
 }
 
 // A 滞在地点 pin always wins a pixel-exact overlap with a photo pin (see
-// mapView.mjs's clusterMarkerPane/photoMarkerPane z-order, issue #23) — without
-// this, a photo whose coordinates happen to sit right on a stay-point pin
-// would be permanently unclickable on the map. Nudging in *screen pixels*
-// (not a fixed real-world distance) keeps the visual gap consistent
-// regardless of zoom: a fixed-meters offset would be too small to separate
-// the pins at a typical place-level zoom (PLACE_ZOOM=14, where a few dozen
-// meters is only a couple of pixels) while being needlessly large — and a
-// visible misrepresentation of where the photo was taken — at a closer zoom.
+// mapView.mjs's clusterMarkerPane/photoMarkerPane z-order, issue #23), so a
+// photo whose real coordinates sit right on a stay-point pin needs *some*
+// nudge or it's permanently hidden on the map. This used to nudge by a fixed
+// *screen-pixel* distance so the visual gap stayed constant at any zoom —
+// but that meant the real-world displacement it introduced scaled with zoom
+// too: at a zoomed-out view (a whole prefecture/country), a 30px nudge could
+// relocate a photo's plotted position by kilometers, badly misrepresenting
+// where it was actually taken. Accuracy takes priority over guaranteed
+// click-separation here: the nudge is now a small FIXED real-world distance
+// (~10m — GPS-noise scale, not a visible relocation) regardless of zoom.
 // Only the *plotted* position moves; photo.lat/lng (popup metadata,
 // resolvePlaceName) are left untouched — see photoView.mjs's createPhotoMarker.
-// Distance must clear the *largest* a stay-point pin can render at: base
-// radius 6 + up to 10 (log1p(count) term, mapView.mjs's renderClusterMarkers)
-// + 4 more if it's the selected pin (highlightSelectedMarker) = up to ~20px,
-// plus the photo marker's own 7px radius — 30px leaves a safe margin over
-// that ~27px worst case instead of just clearing the trigger threshold.
-const PHOTO_NUDGE_TRIGGER_PX = 20;
-const PHOTO_NUDGE_DISTANCE_PX = 30;
-// A real-world proximity gate *in addition to* the pixel check above — pixel
-// distance alone isn't enough, because at a zoomed-out view (e.g. a whole
-// prefecture) dozens of stay points bunch up within a few screen pixels of
-// each other even though they're kilometers apart in reality. Without this,
-// every photo anywhere near *any* visible pin at that zoom got nudged,
-// scattering the whole photo layer instead of only fixing the rare
-// literally-the-same-spot case this was meant for.
 //
-// The gate is `state.clusterThreshold` (this app's own visit-clustering
-// radius, 20–200m, default 50m — the slider in the header), not a fixed
-// constant: two stay points any closer together than that would already
-// have been merged into a single pin by the app's own clustering (lib/cluster.js
-// is a transitive union-find over exactly this distance), so using the same
-// radius guarantees at most one candidate pin is ever "close enough" to a
-// given photo. A larger fixed radius (this used to be a flat 150m) doesn't
-// have that guarantee — with several *distinct* nearby stay points (e.g. a
-// regular commute through a few nearby stations, all within 100–150m of each
-// other but each its own pin), every photo would still pick whichever pin
-// happens to be nearest to *it specifically*, pulling different subsets of
-// what should have clustered together toward different targets and
-// fragmenting one tidy group into a scatter of small dots (reported against
-// real photo data: 2,000+ timeline-estimated photos near a frequently-visited
-// area).
+// One consequence: at a typical place-level zoom, 10m can be just a couple
+// of screen pixels, so a nudged photo may still render effectively behind
+// its stay pin and not be independently clickable there — same as if this
+// function didn't exist. That's an accepted trade-off, not a bug: zooming in
+// further separates them, and the place-detail panel's own photo gallery
+// (Stage 4, issue #2 — see photosForPlace) already surfaces exactly these
+// photos without depending on the map pin being clickable at all.
+//
+// The trigger threshold (15m) intentionally stays well under the minimum
+// possible `state.clusterThreshold` (20m, the slider's floor) — this app's
+// own visit-clustering radius — so a photo within it is essentially
+// guaranteed to belong to the *same* stay cluster as its nearest pin, not a
+// merely-nearby-but-distinct one (see lib/cluster.js's union-find over that
+// same distance). No need to reference state.clusterThreshold directly.
+const PHOTO_NUDGE_TRIGGER_METERS = 15;
+const PHOTO_NUDGE_DISTANCE_METERS = 10;
 function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
   if (!stayPinLatLngs.length || !photos.length) return photos;
-  const triggerMeters = state.clusterThreshold;
   return photos.map((photo) => {
     let nearestPin = null;
     let nearestMeters = Infinity;
@@ -790,27 +795,19 @@ function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
         nearestPin = pin;
       }
     }
-    // Cheap real-world check first — rules out the zoomed-out false-positive
-    // case above without ever touching the map for a coordinate conversion.
-    if (!nearestPin || nearestMeters > triggerMeters) return photo;
+    if (!nearestPin || nearestMeters > PHOTO_NUDGE_TRIGGER_METERS) return photo;
 
-    const pt = map.latLngToContainerPoint([photo.lat, photo.lng]);
-    const pinPt = map.latLngToContainerPoint(nearestPin);
-    let dx = pt.x - pinPt.x;
-    let dy = pt.y - pinPt.y;
-    const pxDist = Math.hypot(dx, dy);
-    if (pxDist >= PHOTO_NUDGE_TRIGGER_PX) return photo; // real-world close, but not actually overlapping on screen at this zoom
-    if (pxDist < 1) {
-      // Pixel-exact overlap (the common case — same GPS coordinate): the
-      // direction "away from the pin" is undefined, so pick a fixed one.
-      dx = 1;
-      dy = -1;
+    // Direction "away from the pin" is undefined at exact overlap (the
+    // common case — identical GPS coordinate), so fall back to a fixed
+    // bearing (north). This is a cosmetic direction at a ~10m scale, so the
+    // usual longitude/latitude-scaling correction for bearing isn't needed.
+    let bearingDeg = 0;
+    if (nearestMeters > 0.5) {
+      const dLat = photo.lat - nearestPin.lat;
+      const dLng = photo.lng - nearestPin.lng;
+      bearingDeg = (Math.atan2(dLng, dLat) * 180) / Math.PI;
     }
-    const len = Math.hypot(dx, dy) || 1;
-    const nudged = map.containerPointToLatLng({
-      x: pinPt.x + (dx / len) * PHOTO_NUDGE_DISTANCE_PX,
-      y: pinPt.y + (dy / len) * PHOTO_NUDGE_DISTANCE_PX,
-    });
+    const nudged = destinationPoint(nearestPin.lat, nearestPin.lng, bearingDeg, PHOTO_NUDGE_DISTANCE_METERS);
     return { ...photo, plotLat: nudged.lat, plotLng: nudged.lng };
   });
 }
@@ -1215,6 +1212,11 @@ function renderPlaceDetail(derived, params) {
   const prefEntry = derived.periodAggregates.get(code);
   const parts = [];
 
+  if (placeGalleryCancel) {
+    placeGalleryCancel();
+    placeGalleryCancel = null;
+  }
+
   const backLabel = state.granularity === 'municipality' ? '市区町村マップに戻る' : '都道府県に戻る';
   parts.push(`<button class="back-link" data-nav="back">← ${backLabel}</button>`);
 
@@ -1248,11 +1250,24 @@ function renderPlaceDetail(derived, params) {
         .join('')
     );
 
+    // Stage 4 (issue #2): inline photo gallery for this place, reusing the
+    // exact same grid markup/thumbnail-loading/lightbox as the map's photo
+    // cluster popup (photoView.mjs) for visual and behavioral consistency.
+    const allPlacePhotos = photosForPlace(memberVisits);
+    const placePhotos = allPlacePhotos.slice(0, MAX_GALLERY_PHOTOS);
+    if (placePhotos.length > 0) {
+      parts.push('<h3 style="margin-top:16px;">この場所の写真</h3>');
+      parts.push(galleryHtml(placePhotos, allPlacePhotos.length));
+    }
+
     el.detailPanelContent.innerHTML = parts.join('');
     wireBackLink();
     el.detailPanelContent.querySelectorAll('.day-item[data-date]').forEach((elDay) => {
       elDay.addEventListener('click', () => openDayView(elDay.dataset.date));
     });
+    if (placePhotos.length > 0) {
+      placeGalleryCancel = loadGalleryThumbnails(el.detailPanelContent, placePhotos, { onOpenLightbox: openPhotoLightbox });
+    }
 
     if (modal) {
       const gen = state.renderGen;
