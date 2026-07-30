@@ -1,0 +1,9 @@
+{
+  "title": "osaka_1.jpg",
+  "description": "",
+  "imageViews": "0",
+  "creationTime": { "timestamp": "1705727400", "formatted": "Jan 20, 2024, 2:10:00 PM UTC+9" },
+  "photoTakenTime": { "timestamp": "1705727400", "formatted": "Jan 20, 2024, 2:10:00 PM UTC+9" },
+  "geoData": { "latitude": 34.7524850, "longitude": 135.5459510, "altitude": 0.0, "latitudeSpan": 0.0, "longitudeSpan": 0.0 },
+  "geoDataExif": { "latitude": 34.7524850, "longitude": 135.5459510, "altitude": 0.0, "latitudeSpan": 0.0, "longitudeSpan": 0.0 }
+}

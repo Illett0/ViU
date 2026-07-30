@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.tile.openstreetmap.org;" />
-<title>PathBrowser - 行動履歴ブラウザ</title>
+<title>ViU - 行動履歴ブラウザ</title>
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
 <link rel="stylesheet" href="vendor/leaflet.markercluster/MarkerCluster.css" />
 <link rel="stylesheet" href="style.css" />
@@ -13,7 +13,8 @@
 
   <header id="app-header">
     <div class="header-left">
-      <h1>PathBrowser</h1>
+      <img src="icon.png" alt="" id="app-icon" />
+      <h1>ViU</h1>
       <button id="btn-open-file" class="btn">ファイルを開く</button>
     </div>
 
@@ -59,6 +60,13 @@
         <h3>最近使ったファイル</h3>
         <ul id="recent-files-list" class="recent-files-list"></ul>
       </div>
+      <details class="export-guide">
+        <summary>タイムラインファイルの入手方法（お持ちでない場合）</summary>
+        <ol>
+          <li>スマートフォンのGoogleマップアプリ、または<a href="https://www.google.com/maps/timeline" target="_blank" rel="noopener">Googleタイムライン</a>の設定画面から「データのエクスポート」を行います（Googleアカウントの設定 &gt; ロケーション履歴 &gt; タイムラインデータのエクスポート）。</li>
+          <li>ダウンロードされたJSONファイル（数十MBになることがあります）をそのまま「ファイルを選択」で開けます。事前の変換・分割は不要です。</li>
+        </ol>
+      </details>
     </section>
 
     <section id="progress-screen" hidden>
@@ -201,6 +209,17 @@
           <button id="btn-link-photo-folder" class="btn">写真フォルダを選択</button>
           <button id="btn-rescan-photo-folder" class="btn" hidden>再スキャン</button>
         </div>
+        <details class="export-guide">
+          <summary>Googleフォトからの写真データの準備方法</summary>
+          <p>
+            Exif GPSタグ付きの写真であればフォルダをそのまま選択できます。位置情報がない写真は、
+            <a href="https://takeout.google.com/" target="_blank" rel="noopener">Google Takeout</a>で
+            「Googleフォト」のみを選択してエクスポートしてください。<code>Takeout/Google フォト/</code>以下に
+            写真本体と位置情報付きのJSONファイル（<code>写真名.jpg.supplemental-metadata.json</code>など）が
+            ペアで出力されるので、そのフォルダを下の「写真フォルダを選択」から指定してください。
+          </p>
+          <p>実際の位置情報を含む個人データなので取り扱いにはご注意を。処理はローカル完結で外部送信はありません。</p>
+        </details>
         <div id="photo-scan-progress" class="progress-bar-track" hidden>
           <div id="photo-scan-progress-fill" class="progress-bar-fill"></div>
         </div>
