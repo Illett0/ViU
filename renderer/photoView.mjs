@@ -79,10 +79,10 @@ const GALLERY_POPUP_WIDTH = 408;
 // whole app on that first click. GALLERY_FETCH_CONCURRENCY bounds how many
 // are ever in flight together; MAX_GALLERY_PHOTOS caps the truly pathological
 // case (hundreds of photos in one loosely-clustered group).
-const MAX_GALLERY_PHOTOS = 80;
+export const MAX_GALLERY_PHOTOS = 80;
 const GALLERY_FETCH_CONCURRENCY = 4;
 
-function galleryHtml(photos, totalCount) {
+export function galleryHtml(photos, totalCount) {
   const thumbs = photos
     .map(
       (photo, i) =>
@@ -105,39 +105,23 @@ function galleryHtml(photos, totalCount) {
 // pin individually — the default leaflet.markercluster behavior becomes
 // unusable once several photos share (near-)identical coordinates (e.g.
 // burst shots), since spiderfied pins at max zoom end up stacked and tiny.
-function openClusterGallery(map, latlng, allPhotos, { onOpenLightbox } = {}) {
-  if (!allPhotos || allPhotos.length === 0) return;
-  const photos = allPhotos.slice(0, MAX_GALLERY_PHOTOS);
-
-  // minWidth is what actually sizes the popup: the grid's 1fr columns and
-  // width:100% thumbnails never push the content wider on their own, so
-  // without it the popup collapses to its minimum and the thumbnails end up
-  // tiny (issue #17).
-  const popup = L.popup({ minWidth: GALLERY_POPUP_WIDTH, maxWidth: GALLERY_POPUP_WIDTH })
-    .setLatLng(latlng)
-    .setContent(galleryHtml(photos, allPhotos.length))
-    .openOn(map);
-
-  const popupEl = popup.getElement();
-  if (!popupEl) return;
-
-  // Fixed-size worker pool over the photo list, instead of firing every
-  // fetch at once — bounds how many photos:get-thumbnail IPC calls (and
-  // their main-thread image decode/resize/encode work) are in flight
-  // together, and stops issuing new ones once the popup itself has closed
-  // (no point decoding thumbnails nobody can see anymore).
+// Fixed-size worker pool over `photos`, fetching each one's thumbnail and
+// filling in the matching `.photo-cluster-popup-thumb-wrap[data-index]`
+// inside `containerEl` (expected to already contain `galleryHtml`'s markup)
+// — instead of firing every fetch at once. Bounds how many
+// photos:get-thumbnail IPC calls (and their main-thread image
+// decode/resize/encode work) are in flight together. Returns a `cancel()`
+// callers must invoke once containerEl is no longer visible/attached, so no
+// further fetches populate a dead element.
+export function loadGalleryThumbnails(containerEl, photos, { onOpenLightbox } = {}) {
   let cancelled = false;
-  popup.on('remove', () => {
-    cancelled = true;
-  });
-
   let nextIndex = 0;
   async function fetchNext() {
     if (cancelled) return;
     const i = nextIndex++;
     if (i >= photos.length) return;
     const photo = photos[i];
-    const wrap = popupEl.querySelector(`.photo-cluster-popup-thumb-wrap[data-index="${i}"]`);
+    const wrap = containerEl.querySelector(`.photo-cluster-popup-thumb-wrap[data-index="${i}"]`);
     if (wrap) {
       const result = await window.pathBrowser.getPhotoThumbnail(photo.filePath);
       if (cancelled) return;
@@ -154,6 +138,29 @@ function openClusterGallery(map, latlng, allPhotos, { onOpenLightbox } = {}) {
   }
   const workerCount = Math.min(GALLERY_FETCH_CONCURRENCY, photos.length);
   for (let w = 0; w < workerCount; w++) fetchNext();
+  return () => {
+    cancelled = true;
+  };
+}
+
+function openClusterGallery(map, latlng, allPhotos, { onOpenLightbox } = {}) {
+  if (!allPhotos || allPhotos.length === 0) return;
+  const photos = allPhotos.slice(0, MAX_GALLERY_PHOTOS);
+
+  // minWidth is what actually sizes the popup: the grid's 1fr columns and
+  // width:100% thumbnails never push the content wider on their own, so
+  // without it the popup collapses to its minimum and the thumbnails end up
+  // tiny (issue #17).
+  const popup = L.popup({ minWidth: GALLERY_POPUP_WIDTH, maxWidth: GALLERY_POPUP_WIDTH })
+    .setLatLng(latlng)
+    .setContent(galleryHtml(photos, allPhotos.length))
+    .openOn(map);
+
+  const popupEl = popup.getElement();
+  if (!popupEl) return;
+
+  const cancel = loadGalleryThumbnails(popupEl, photos, { onOpenLightbox });
+  popup.on('remove', cancel);
 }
 
 export function clearPhotoLayer(map, layerRef) {

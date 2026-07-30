@@ -17,6 +17,29 @@ function distanceMeters(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Spherical destination-point formula: the point `distanceM` meters from
+// (lat, lng) along `bearingDeg` (0 = north, clockwise). Used for small,
+// fixed real-world nudges (app.mjs's nudgePhotosAwayFromPins) — at the
+// few-meters scale those are applied at, this is plenty accurate despite
+// not accounting for ellipsoidal earth shape.
+function destinationPoint(lat, lng, bearingDeg, distanceM) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const toDeg = (r) => (r * 180) / Math.PI;
+  const brng = toRad(bearingDeg);
+  const lat1 = toRad(lat);
+  const lng1 = toRad(lng);
+  const angularDist = distanceM / R;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angularDist) + Math.cos(lat1) * Math.sin(angularDist) * Math.cos(brng));
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(brng) * Math.sin(angularDist) * Math.cos(lat1),
+      Math.cos(angularDist) - Math.sin(lat1) * Math.sin(lat2)
+    );
+  return { lat: toDeg(lat2), lng: ((toDeg(lng2) + 540) % 360) - 180 };
+}
+
 function isNearAny(lat, lng, centers, radiusMeters) {
   if (lat == null || lng == null) return false;
   for (const c of centers) {
@@ -635,6 +658,7 @@ export {
   MAX_ESTIMATION_GAP_MS,
   estimatePhotoLocations,
   distanceMeters,
+  destinationPoint,
   applyPrivacy,
   isInAnyZone,
   applyExclusionZones,

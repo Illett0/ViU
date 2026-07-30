@@ -53,6 +53,18 @@ function near(a, b, eps = 0.0005) {
   return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < eps;
 }
 
+// Plain haversine, mirroring renderer/aggregate.mjs's distanceMeters — this
+// test file has no access to renderer internals beyond page.evaluate, so it
+// keeps its own tiny copy just for sanity-checking nudge magnitude.
+function distanceMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // Leaflet's default zoom/pan animation runs ~250ms. `latLngToContainerPoint`
 // (what latLngToPoint below wraps) reflects the map's *target* state
 // immediately/synchronously on setView/panTo, but the visual DOM position a
@@ -249,12 +261,18 @@ async function main() {
       assert.strictEqual(view.params.clusterId, rowA.clusterId);
     });
 
-    // ---- Follow-up to issue #23: a photo pixel-exactly coincident with a
-    // stay-point pin is nudged a few pixels away (app.mjs's
-    // nudgePhotosAwayFromPins) so it stays independently clickable too,
-    // instead of being permanently hidden behind the (correctly-winning)
-    // stay-point pin forever ----
-    await step('a photo coincident with a stay-point pin is nudged and independently clickable', async () => {
+    // ---- Follow-up to issue #23, revised for accuracy-over-clickability
+    // (user feedback: the original pixel-based nudge could visibly
+    // misrepresent a photo's real location at low zoom): a photo exactly
+    // coincident with a stay-point pin is nudged a small FIXED real-world
+    // distance (~10m, app.mjs's PHOTO_NUDGE_DISTANCE_METERS/nudgePhotosAwayFromPins),
+    // not a zoom-scaled screen-pixel one. At a typical place-level zoom that
+    // can be just a couple of screen pixels, so independent map-click
+    // separation is no longer guaranteed — that's an accepted trade-off, not
+    // a regression; the place-detail panel's own photo gallery (Stage 4,
+    // issue #2) reaches these photos without depending on the map pin being
+    // clickable at all ----
+    await step('a photo coincident with a stay-point pin is nudged a small, bounded real-world distance', async () => {
       await goToPlace(page, { clusterId: rowA.clusterId, muniCode: rowA.muniCode, code: TOKYO_CODE });
       const photoOn = (await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerCount())).map > 0;
       if (!photoOn) await page.evaluate(() => window.__pathBrowserTest.togglePhotoLayer());
@@ -263,15 +281,13 @@ async function main() {
       const plotted = await page.evaluate(() => window.__pathBrowserTest.getPhotoMarkerLatLngs());
       const tokyoPhoto = plotted.find((p) => p.filePath.includes('tokyo_stay'));
       assert(tokyoPhoto, 'expected the tokyo_stay.jpg marker to be plotted');
-      assert(
-        !near(tokyoPhoto.lat, CLUSTER_A.lat) || !near(tokyoPhoto.lng, CLUSTER_A.lng),
-        'a photo exactly coincident with a stay-point pin should have been nudged to a different plotted position'
-      );
 
-      const pt = await page.evaluate(({ lat, lng }) => window.__pathBrowserTest.latLngToPoint(lat, lng), tokyoPhoto);
-      await page.mouse.click(pt.x, pt.y);
-      await page.waitForTimeout(300);
-      assert(await page.$('.photo-popup'), 'clicking the nudged photo marker should open its popup');
+      const nudgeDistance = distanceMeters(tokyoPhoto.lat, tokyoPhoto.lng, CLUSTER_A.lat, CLUSTER_A.lng);
+      assert(nudgeDistance > 3, `a photo exactly coincident with a stay-point pin should have been nudged, got only ${nudgeDistance.toFixed(1)}m`);
+      assert(
+        nudgeDistance < 20,
+        `the nudge should stay close to its ~10m target (small enough not to misrepresent the photo's real location), got ${nudgeDistance.toFixed(1)}m`
+      );
     });
 
     // ---- Issue #24: photo cluster opens the gallery on the very first
@@ -309,12 +325,14 @@ async function main() {
       const { zoom } = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
 
       // ~10 screen pixels away from CLUSTER_A at whatever zoom the prefecture
-      // fit landed on — comfortably inside the nudge's pixel trigger, but (at
-      // this zoomed-out level) far more than the real-world gate (this app's
-      // own clusterThreshold, default 50m — see app.mjs's nudgePhotosAwayFromPins).
+      // fit landed on — at this zoomed-out level that's still far more than
+      // the nudge's real-world trigger (a fixed 15m — app.mjs's
+      // PHOTO_NUDGE_TRIGGER_METERS/nudgePhotosAwayFromPins), even though it
+      // would have been "pixel-close" enough to matter under the old
+      // pixel-based trigger this replaced.
       const metersPerPixel = (156543.03392 * Math.cos((CLUSTER_A.lat * Math.PI) / 180)) / Math.pow(2, zoom);
       const realDistanceMeters = metersPerPixel * 10;
-      assert(realDistanceMeters > 50, `test setup invalid: expected >50m at zoom ${zoom}, got ${realDistanceMeters.toFixed(0)}m — the fitted zoom changed, adjust this test`);
+      assert(realDistanceMeters > 15, `test setup invalid: expected >15m at zoom ${zoom}, got ${realDistanceMeters.toFixed(0)}m — the fitted zoom changed, adjust this test`);
       const farButPixelClose = { lat: CLUSTER_A.lat + (metersPerPixel * 10) / 111320, lng: CLUSTER_A.lng };
 
       await page.evaluate((photo) => window.__pathBrowserTest.setPhotos([photo]), {
