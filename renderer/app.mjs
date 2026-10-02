@@ -127,6 +127,8 @@ const el = {
   zoneHiddenCount: document.getElementById('zone-hidden-count'),
   btnClearCache: document.getElementById('btn-clear-cache'),
   cacheClearResult: document.getElementById('cache-clear-result'),
+  btnDeleteAllData: document.getElementById('btn-delete-all-data'),
+  btnDeleteAllDataWelcome: document.getElementById('btn-delete-all-data-welcome'),
   settingsVersion: document.getElementById('settings-version'),
   dayViewOverlay: document.getElementById('day-view-overlay'),
   dayViewTitle: document.getElementById('day-view-title'),
@@ -183,6 +185,11 @@ function resetLabelQueue() {
     labelPanelObserver = null;
   }
 }
+
+// Keep the main process's reverse-geocode gate in sync with the renderer's
+// initial privacy state (see main.js app:set-privacy-mode) — matters after a
+// page reload, where the main process may still remember an earlier OFF.
+window.pathBrowser.setPrivacyMode(state.privacy);
 
 const zonesReady = window.pathBrowser.getZones().then((zones) => {
   state.zones = zones || [];
@@ -1702,6 +1709,7 @@ el.btnForward.addEventListener('click', () => {
 function setPrivacy(value) {
   const wasPrivacyOn = state.privacy;
   state.privacy = value;
+  window.pathBrowser.setPrivacyMode(value);
   el.btnPrivacy.classList.toggle('off', !state.privacy);
   el.privacyLabel.textContent = state.privacy ? 'プライバシーモード ON' : 'プライバシーモード OFF';
   document.getElementById('privacy-icon').textContent = state.privacy ? '\u{1F512}' : '\u{1F513}';
@@ -1731,7 +1739,7 @@ el.btnSettingsClose.addEventListener('click', closeSettings);
 el.btnSettingsGotoMap.addEventListener('click', closeSettings);
 
 el.btnClearCache.addEventListener('click', async () => {
-  const proceed = confirm('市区町村判定・クラスタリング結果とNominatimの地名キャッシュを削除します。次回ファイルを開いたときに再計算されます（除外ゾーンや最近使ったファイルの履歴は削除されません）。続けますか？');
+  const proceed = confirm('市区町村判定・クラスタリング結果、地名取得結果、写真のサムネイルのキャッシュを削除します。次回ファイルを開いたときに再計算されます（除外ゾーンや最近使ったファイルの履歴は削除されません）。続けますか？');
   if (!proceed) return;
   el.btnClearCache.disabled = true;
   try {
@@ -1742,6 +1750,21 @@ el.btnClearCache.addEventListener('click', async () => {
     el.btnClearCache.disabled = false;
   }
 });
+
+// Confirmation happens in the main process (native dialog — see main.js
+// data:delete-all). On success the page is reloaded so no in-memory copy of
+// the timeline, photos, or zones survives in this window either.
+async function deleteAllData(btn) {
+  btn.disabled = true;
+  try {
+    const { deleted } = await window.pathBrowser.deleteAllData();
+    if (deleted) location.reload();
+  } finally {
+    btn.disabled = false;
+  }
+}
+el.btnDeleteAllData.addEventListener('click', () => deleteAllData(el.btnDeleteAllData));
+el.btnDeleteAllDataWelcome.addEventListener('click', () => deleteAllData(el.btnDeleteAllDataWelcome));
 
 el.btnPrivacyNoticeContinue.addEventListener('click', () => {
   el.privacyNoticeScreen.hidden = true;

@@ -61,6 +61,7 @@
       <div id="recent-files-section" hidden>
         <h3>最近使ったファイル</h3>
         <ul id="recent-files-list" class="recent-files-list"></ul>
+        <button id="btn-delete-all-data-welcome" class="btn btn-danger btn-small">保存データをすべて削除</button>
       </div>
       <details class="export-guide">
         <summary>タイムラインファイルの入手方法（お持ちでない場合）</summary>
@@ -191,14 +192,20 @@
       </div>
 
       <div id="settings-cache-section" class="settings-cache-section">
-        <h3>キャッシュ</h3>
+        <h3>キャッシュ・保存データ</h3>
         <p class="settings-cache-text">
-          市区町村判定・クラスタリング結果とNominatimの地名取得結果はディスクにキャッシュされ、
-          次回以降の読み込みを高速化しています。挙動がおかしい場合や、ディスク容量を空けたい場合は
-          クリアしてください（除外ゾーンや最近使ったファイルの履歴は削除されません）。
+          市区町村判定・クラスタリング結果と地名取得結果（Nominatim/Overpass）、写真のサムネイルは、
+          このPCのアプリデータフォルダにのみキャッシュされ、次回以降の読み込みを高速化しています。
+          挙動がおかしい場合や、ディスク容量を空けたい場合はクリアしてください（除外ゾーンや最近使ったファイルの履歴は削除されません）。
         </p>
         <button id="btn-clear-cache" class="btn">キャッシュをクリア</button>
         <p id="cache-clear-result" class="empty-note" hidden></p>
+        <p class="settings-cache-text settings-delete-all-text">
+          最近使ったファイルの履歴・アプリ内バックアップ（読み込んだタイムラインのコピー）・除外ゾーン・写真フォルダの連携設定を含め、
+          ViUがこのPCに保存したデータをすべて削除します。PCを手放す・アプリをアンインストールする前などにご利用ください。
+          元のタイムラインファイルや写真そのものは削除されません。
+        </p>
+        <button id="btn-delete-all-data" class="btn btn-danger">すべてのデータを削除</button>
       </div>
 
       <div id="settings-photo-section" class="settings-photo-section">

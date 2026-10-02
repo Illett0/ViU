@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('pathBrowser', {
   resolveRecentFile: (hash) => ipcRenderer.invoke('timeline:resolve-recent-file', hash),
   removeRecentFile: (hash) => ipcRenderer.invoke('timeline:remove-recent-file', hash),
   clearCache: () => ipcRenderer.invoke('cache:clear'),
+  deleteAllData: () => ipcRenderer.invoke('data:delete-all'),
+  setPrivacyMode: (enabled) => ipcRenderer.invoke('app:set-privacy-mode', enabled),
   choosePhotoFolder: () => ipcRenderer.invoke('photos:choose-folder'),
   getLinkedPhotoFolder: () => ipcRenderer.invoke('photos:get-linked-folder'),
   scanPhotoFolder: (folder) => ipcRenderer.invoke('photos:scan-folder', folder),

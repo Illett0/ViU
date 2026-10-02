@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Worker } = require('worker_threads');
@@ -25,6 +25,12 @@ if (process.env.PATHBROWSER_TEST_USERDATA) {
 }
 
 let mainWindow;
+// Mirrors the renderer's privacy-mode toggle (renderer/app.mjs setPrivacy ->
+// app:set-privacy-mode). The renderer already never asks for a detail name
+// while privacy mode is on, but this is the one code path that sends
+// coordinates off the machine, so it's gated here too rather than trusting
+// the renderer alone. Defaults to ON, same as the renderer's own default.
+let privacyModeEnabled = true;
 let prefectureGeoJSONCache = null;
 let municipalityGeoJSONCache = null;
 
@@ -50,6 +56,17 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https:') || url.startsWith('http:')) shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // The app is a single local page — never let the window itself navigate
+  // away to a remote URL (e.g. a stray link without target="_blank", or a
+  // dropped file/URL), which would put an arbitrary web page in the same
+  // window that holds the user's location data.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file:')) {
+      event.preventDefault();
+      if (url.startsWith('https:') || url.startsWith('http:')) shell.openExternal(url);
+    }
   });
 }
 
@@ -179,7 +196,12 @@ ipcMain.handle('timeline:recluster', async (event, { fingerprint, threshold, poi
   });
 });
 
+ipcMain.handle('app:set-privacy-mode', async (event, enabled) => {
+  privacyModeEnabled = enabled !== false;
+});
+
 ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) => {
+  if (privacyModeEnabled) return { label: null, error: 'privacy-mode', fromCache: false };
   return nominatim.reverseGeocode(app.getPath('userData'), { placeId, lat, lng });
 });
 
@@ -196,6 +218,58 @@ ipcMain.handle('cache:clear', async () => {
   const photoCount = photoCache.clearEntries(userDataPath);
   const thumbnailCount = thumbnailCache.clearCache(userDataPath);
   return { geoCount, nominatimCount, photoCount, thumbnailCount };
+});
+
+// "すべてのデータを削除": unlike cache:clear above, this wipes everything ViU
+// has ever written under userData — including the recent-files history and
+// its timeline-backups/ (full copies of imported location-history exports),
+// exclusion zones, and the linked photo folder — plus Chromium's own
+// HTTP cache/storage for this app (map tiles reveal which areas were
+// viewed). Confirmed with a native dialog here in the main process rather
+// than a renderer confirm(), so the destructive step can't be triggered by
+// a single stray IPC call without the user seeing the prompt.
+const USER_DATA_ENTRIES = [
+  'geo-cache',
+  'nominatim-cache.json',
+  'overpass-cache.json',
+  'photo-cache.json',
+  'thumbnail-cache',
+  'recent-files.json',
+  'timeline-backups',
+  'exclusion-zones.json',
+];
+
+ipcMain.handle('data:delete-all', async () => {
+  // Test-only escape hatch, mirroring PATHBROWSER_TEST_EXPORT_PATH: native
+  // message boxes can't be driven by UI automation.
+  const { response } = process.env.PATHBROWSER_TEST_CONFIRM_DELETE_ALL
+    ? { response: 0 }
+    : await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['すべて削除する', 'キャンセル'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'すべてのデータを削除',
+        message: 'ViUが保存したデータをすべて削除しますか？',
+        detail:
+          '最近使ったファイルの履歴とアプリ内バックアップ（タイムラインのコピー）、除外ゾーン、写真フォルダの連携設定、各種キャッシュが削除されます。元のタイムラインファイルや写真そのものは削除されません。この操作は取り消せません。',
+      });
+  if (response !== 0) return { deleted: false };
+
+  const userDataPath = app.getPath('userData');
+  // Drop the in-memory copies too, so nothing deleted from disk can be
+  // re-persisted from memory afterwards.
+  nominatim.clearCache(userDataPath);
+  for (const name of USER_DATA_ENTRIES) {
+    try {
+      fs.rmSync(path.join(userDataPath, name), { recursive: true, force: true });
+    } catch (err) {
+      console.error('delete-all: failed to remove', name, err && err.code);
+    }
+  }
+  await session.defaultSession.clearCache();
+  await session.defaultSession.clearStorageData();
+  return { deleted: true };
 });
 
 ipcMain.handle('photos:choose-folder', async () => {
