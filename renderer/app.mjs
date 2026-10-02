@@ -9,6 +9,8 @@ import {
   findMunicipalityCodeForPoint,
   renderClusterMarkers,
   clearMarkers,
+  renderTimelapsePoints,
+  clearTimelapsePoints,
 } from './mapView.mjs';
 import { initRouteMap, renderRoute, clearRoute, colorForMode } from './routeView.mjs';
 import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, MAX_GALLERY_PHOTOS } from './photoView.mjs';
@@ -164,6 +166,7 @@ const geojsonLayerRef = { layer: null };
 const photoLayerRef = { layer: null }; // 制覇マップ側の写真レイヤー
 const routePhotoLayerRef = { layer: null }; // 経路マップ側の写真レイヤー（別Leafletインスタンスなので別レイヤー参照が要る）
 const markerLayerRef = { layer: null };
+const timelapsePointsRef = { layer: null, renderer: null };
 const routeLayerRef = { layer: null };
 const zoneLayerRef = { layer: null };
 const zonePendingLayerRef = { layer: null };
@@ -979,6 +982,16 @@ function renderMapTab(derived) {
   }
 
   el.islandBadge.hidden = true;
+
+  if (view.view === 'national' && state.timelapse.playing) {
+    renderTimelapsePoints(
+      map,
+      timelapsePointsRef,
+      computeClusterRanking(derived.displayData, { privacy: state.privacy, municipalityByCode: state.municipalityByCode, limit: null })
+    );
+  } else {
+    clearTimelapsePoints(timelapsePointsRef);
+  }
 
   if (view.view === 'national') {
     clearMarkers(markerLayerRef);
@@ -1913,6 +1926,9 @@ window.__pathBrowserTest = {
   resetTimelapse,
   getTimelapseState() {
     return { ...state.timelapse, steps: state.timelapse.steps.length };
+  },
+  getTimelapsePointCount() {
+    return timelapsePointsRef.layer ? timelapsePointsRef.layer.getLayers().length : 0;
   },
   getVisitedPrefectures() {
     return [...getDerived().periodAggregates.values()].filter((e) => e.stayCount > 0 || e.firstEpoch != null);

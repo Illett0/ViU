@@ -324,6 +324,35 @@ export function clearMarkers(markerLayerRef) {
 // list (via the shared formatPlaceLabel), instead of just the muni name.
 // Returns Map<row-key, marker> so the caller can push a label update into an
 // already-open tooltip later, once its fetch resolves.
+// Timelapse playback on the national view: every 滞在地点 visited so far
+// (cumulative up to the current month) as small non-interactive dots, so the
+// map shows *where* in each prefecture you went, not just which prefectures
+// got painted. Can be thousands of points redrawn every tick (~500ms), so
+// they go on a single canvas renderer rather than one SVG node each, and are
+// non-interactive (purely visual — the national view is not drillable while
+// playback is running anyway). `rows` is computeClusterRanking output, so
+// privacy mode's municipality rollup applies automatically.
+export function renderTimelapsePoints(map, layerRef, rows) {
+  if (!layerRef.renderer) layerRef.renderer = L.canvas({ pane: 'clusterMarkerPane', padding: 0.5 });
+  if (!layerRef.layer) layerRef.layer = L.layerGroup().addTo(map);
+  layerRef.layer.clearLayers();
+  for (const row of rows) {
+    L.circleMarker([row.lat, row.lng], {
+      renderer: layerRef.renderer,
+      radius: 2.5 + Math.min(4, Math.log1p(row.count)),
+      color: MARKER_BORDER_COLOR,
+      weight: 0.8,
+      fillColor: MARKER_FILL_COLOR,
+      fillOpacity: 0.85,
+      interactive: false,
+    }).addTo(layerRef.layer);
+  }
+}
+
+export function clearTimelapsePoints(layerRef) {
+  if (layerRef.layer) layerRef.layer.clearLayers();
+}
+
 export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labelCache = null) {
   if (!markerLayerRef.layer) {
     markerLayerRef.layer = L.layerGroup().addTo(map);
