@@ -157,7 +157,7 @@ export function renderDayRoute(map, layerRef, segments, { labelFor }) {
     if (!seg.points || seg.points.length < 2) return;
     const color = colorForMode(seg.mode);
     const pattern = linePattern(seg.mode);
-    const tip = `${labelFor(seg.mode)}${seg.inferred ? '（推定区間）' : ''} ${formatClock(seg.startEpoch)}–${formatClock(seg.endEpoch)}`;
+    const tip = `${labelFor(seg.mode)}${seg.inferred ? '（推定区間）' : ''}${seg.trimmed ? '（除外ゾーン外の部分）' : ''} ${formatClock(seg.startEpoch)}–${formatClock(seg.endEpoch)}`;
 
     const casing = L.polyline(seg.points, {
       color: '#ffffff',

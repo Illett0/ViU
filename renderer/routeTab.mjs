@@ -4,7 +4,7 @@ import { clearMarkers } from './mapView.mjs';
 import { initRouteMap, renderRoute, clearRoute, colorForMode, renderDayRoute, lineSampleSvg, formatClock } from './routeView.mjs';
 import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, MAX_GALLERY_PHOTOS } from './photoView.mjs';
 import { modeLabel, formatDuration } from './statsView.mjs';
-import { applyPrivacy, applyExclusionZones, municipalityName, computeModalVisitLocation, dwellMs, escapeHtml } from './aggregate.mjs';
+import { applyPrivacy, applyExclusionZones, municipalityName, computeModalVisitLocation, dwellMs, escapeHtml, visibleMovePortion } from './aggregate.mjs';
 import { dayViewLayerRef, dayViewMarkerLayerRef, dayViewPhotoLayerRef, el, routeLayerRef, routePhotoLayerRef, state, ui } from './context.mjs';
 import { getVisiblePhotos, openPhotoLightbox, resolvePlaceName, photosForDay } from './photos.mjs';
 import { enqueueLabelFetch, onPlaceLabelUpdated } from './labels.mjs';
@@ -151,19 +151,27 @@ function requestPlaceLabels(visits, displayData) {
 
 // Stays and moves merged into one chronological list. Moves come from
 // `activities` (mode, distance, times — deliberately *no* start/end place
-// names: activities aren't exclusion-zone filtered, see applyExclusionZones),
-// each linked to the drawn route segments overlapping its time span.
+// names). Activities aren't exclusion-zone filtered themselves, so each move
+// goes through visibleMovePortion: one touching a zone is reduced to its
+// part outside the zone (or dropped if none of it is visible), so neither the
+// list nor the summary reveals e.g. when someone left a zoned-out home. Each
+// move is linked to the drawn route segments overlapping its shown span.
 function buildTimeline(dateStr, displayData, segments) {
   const visits = state.privacy
     ? []
     : (displayData.visits || []).filter((v) => v.dateStr === dateStr).sort((a, b) => a.startEpoch - b.startEpoch);
-  const moves = (displayData.activities || []).filter((a) => a.dateStr === dateStr && a.startEpoch != null);
+  const moves = [];
+  for (const a of displayData.activities || []) {
+    if (a.dateStr !== dateStr || a.startEpoch == null) continue;
+    const shown = visibleMovePortion(a, segments, state.zones);
+    if (shown) moves.push({ ...a, ...shown });
+  }
   const items = [];
   visits.forEach((v, i) => items.push({ kind: 'stay', epoch: v.startEpoch, visit: v, number: i + 1 }));
   for (const a of moves) {
     const segIdx = [];
     segments.forEach((s, i) => {
-      if (s.startEpoch != null && s.endEpoch != null && a.endEpoch != null && s.startEpoch < a.endEpoch && s.endEpoch > a.startEpoch) segIdx.push(i);
+      if (s.startEpoch != null && s.endEpoch != null && a.endEpoch != null && s.startEpoch <= a.endEpoch && s.endEpoch >= a.startEpoch) segIdx.push(i);
     });
     items.push({ kind: 'move', epoch: a.startEpoch, activity: a, segIdx });
   }
@@ -224,13 +232,17 @@ function renderTimelineList() {
       }
       const a = item.activity;
       const dur = a.endEpoch != null ? a.endEpoch - a.startEpoch : 0;
+      // A cut side's time is where the visible part of the route begins/ends,
+      // not when the move itself started/ended — marked 「頃」.
+      const time = `${formatClock(a.startEpoch)}${a.startCut ? '頃' : ''}–${formatClock(a.endEpoch)}${a.endCut ? '頃' : ''}`;
       return (
         `<li><button type="button" class="day-tl-item day-tl-move" data-index="${i}">` +
         `<span class="day-tl-line">${lineSampleSvg(a.mode)}</span>` +
-        `<span class="day-tl-body"><span class="day-tl-time">${formatClock(a.startEpoch)}–${formatClock(a.endEpoch)}</span>` +
+        `<span class="day-tl-body"><span class="day-tl-time">${time}</span>` +
         `<span class="day-tl-title">${escapeHtml(modeLabel(a.mode))}で移動</span>` +
-        `<span class="day-tl-sub">${a.distanceMeters ? formatKm(a.distanceMeters) + '・' : ''}${formatDuration(dur)}</span></span>` +
-        `</button></li>`
+        `<span class="day-tl-sub">${a.distanceMeters ? formatKm(a.distanceMeters) + '・' : ''}${formatDuration(dur)}</span>` +
+        (a.partial ? '<span class="day-tl-note">除外ゾーン外の部分のみ</span>' : '') +
+        `</span></button></li>`
       );
     })
     .join('');
@@ -503,6 +515,7 @@ export function getDayViewState() {
     stops: dayView.stopMarkers.length,
     segments: dayView.segments.length,
     photos: dayView.photos.length,
+    segmentTips: dayView.segLayers.map((layers) => (layers[0] && layers[0].getTooltip() ? String(layers[0].getTooltip().getContent()) : '')),
     photosVisible: dayPhotosVisible,
     photoPins: dayViewPhotoLayerRef.markersByPath ? dayViewPhotoLayerRef.markersByPath.size : 0,
   };

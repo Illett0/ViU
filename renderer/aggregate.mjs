@@ -97,7 +97,65 @@ function trimSegmentByZones(seg, zones) {
     }
   }
   if (current.length >= 2) runs.push(current);
-  return runs.map((points) => ({ ...seg, points }));
+  // Each surviving run carries its *own* time span (from its first/last
+  // point's epoch, see parseWorker's [lat, lng, epoch] points) and a
+  // `trimmed` flag, so nothing downstream (tooltips, the day view timeline)
+  // shows the original run's times — e.g. the exact moment someone left a
+  // zoned-out home.
+  const trimmed = runs.length !== 1 || runs[0].length !== seg.points.length;
+  return runs.map((points) => {
+    if (!trimmed) return seg;
+    const first = points[0][2];
+    const last = points[points.length - 1][2];
+    return { ...seg, points, trimmed: true, startEpoch: first ?? seg.startEpoch, endEpoch: last ?? seg.endEpoch };
+  });
+}
+
+// What the day view may show of one move (activity) once exclusion zones
+// apply. Activities themselves aren't zone-filtered (aggregate stats keep
+// them, see applyExclusionZones), so for display:
+//   - a move that doesn't touch any zone is shown as-is;
+//   - a move that starts/ends in a zone, or whose route was cut by one, is
+//     reduced to the part outside the zones: its time span and distance come
+//     from the visible (already-trimmed) route points within the move's own
+//     time window — `startCut`/`endCut` mark which side was cut;
+//   - if nothing of it is visible (no GPS trace outside the zone), it is
+//     hidden entirely (returns null).
+// `segments` must be the zone-trimmed segments (applyExclusionZones output).
+const CUT_TOLERANCE_MS = 60 * 1000;
+function visibleMovePortion(activity, segments, zones) {
+  const a = activity;
+  const full = { startEpoch: a.startEpoch, endEpoch: a.endEpoch, distanceMeters: a.distanceMeters || 0, partial: false, startCut: false, endCut: false };
+  if (!zones || zones.length === 0) return full;
+  const overlapping = segments.filter(
+    (s) => s.startEpoch != null && s.endEpoch != null && a.startEpoch != null && a.endEpoch != null && s.startEpoch <= a.endEpoch && s.endEpoch >= a.startEpoch
+  );
+  const touches =
+    (a.startLat != null && isInAnyZone(a.startLat, a.startLng, zones)) ||
+    (a.endLat != null && isInAnyZone(a.endLat, a.endLng, zones)) ||
+    overlapping.some((s) => s.trimmed);
+  if (!touches) return full;
+
+  let start = null;
+  let end = null;
+  let distance = 0;
+  for (const s of overlapping) {
+    if (s.inferred) continue; // a straight start->end guess says nothing about where the zone boundary was crossed
+    const pts = s.points.filter((p) => p[2] != null && p[2] >= a.startEpoch && p[2] <= a.endEpoch);
+    if (pts.length < 2) continue;
+    for (let i = 1; i < pts.length; i++) distance += distanceMeters(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+    if (start == null || pts[0][2] < start) start = pts[0][2];
+    if (end == null || pts[pts.length - 1][2] > end) end = pts[pts.length - 1][2];
+  }
+  if (start == null) return null;
+  return {
+    startEpoch: start,
+    endEpoch: end,
+    distanceMeters: distance,
+    partial: true,
+    startCut: start - a.startEpoch > CUT_TOLERANCE_MS,
+    endCut: a.endEpoch - end > CUT_TOLERANCE_MS,
+  };
 }
 
 // User-defined "pretend this never happened" zones (e.g. home). Unlike
@@ -686,6 +744,7 @@ export {
   applyPrivacy,
   isInAnyZone,
   applyExclusionZones,
+  visibleMovePortion,
   filterByPeriod,
   filterUpToPeriod,
   computePrefectureAggregates,

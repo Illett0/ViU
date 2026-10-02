@@ -607,6 +607,7 @@ html, body {
 .day-tl-title { font-size: 14px; overflow-wrap: anywhere; }
 .day-tl-move .day-tl-title { font-size: 13px; }
 .day-tl-sub { font-size: 12px; color: var(--color-text-dim); }
+.day-tl-note { font-size: 11px; color: var(--color-privacy-on); }
 
 .visually-hidden {
   position: absolute !important;

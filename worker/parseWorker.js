@@ -326,7 +326,10 @@ function run() {
       dateStr: startParts ? startParts.dateStr : null,
       mode,
       inferred: false,
-      points: runPoints.map((p) => [p[0], p[1]]),
+      // [lat, lng, epoch] — the per-point time lets exclusion-zone trimming
+      // (renderer/aggregate.mjs trimSegmentByZones) report the visible
+      // portion's real start/end time instead of the whole run's.
+      points: runPoints.map((p) => [p[0], p[1], p[2]]),
     });
   }
 
@@ -410,8 +413,8 @@ function run() {
       mode: a.mode,
       inferred: true,
       points: [
-        [a.startLat, a.startLng],
-        [a.endLat, a.endLng],
+        [a.startLat, a.startLng, a.startEpoch],
+        [a.endLat, a.endLng, a.endEpoch],
       ],
     });
   }

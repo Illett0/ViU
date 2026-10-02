@@ -121,6 +121,43 @@ async function main() {
       await page.waitForSelector('#day-view-overlay', { state: 'hidden' });
     });
 
+    // ---- Exclusion zones: a move touching a zone shows only its part outside
+    // the zone (time from the first visible GPS point, distance from the
+    // visible points) — never the moment someone left/arrived at a zoned
+    // place. The fixture's train leaves cluster A (Tokyo Station) at 10:00;
+    // its next GPS point is at 11:15. ----
+    await step('a move leaving an exclusion zone shows only its part outside the zone', async () => {
+      await page.evaluate(({ lat, lng }) => window.__pathBrowserTest.addZone(lat, lng, 50), CLUSTER_A);
+      await page.evaluate(() => window.__pathBrowserTest.openDayView('2024-01-20'));
+      await page.waitForSelector('#day-view-overlay:not([hidden])');
+      const time = await page.textContent('.day-tl-move .day-tl-time');
+      assert.strictEqual(time, '11:15頃–12:30', `the cut start should come from the first visible point, got "${time}"`);
+      const row = await page.textContent('.day-tl-move');
+      assert(row.includes('除外ゾーン外の部分のみ'), 'the row should say it is only the part outside the zone');
+      assert(!row.includes('10:00'), 'the departure time from inside the zone must not appear');
+      assert(!row.includes('403'), 'the full trip distance (which includes the zoned part) must not appear');
+      const summary = await page.textContent('#day-view-summary');
+      assert(!summary.includes('403') && !summary.includes('2時間30分'), `summary must only total the visible part, got "${summary}"`);
+      const tip = await page.evaluate(() => {
+        const st = window.__pathBrowserTest.getDayViewState();
+        return st && st.segmentTips;
+      });
+      assert(tip && tip.every((t) => !t.includes('10:00')), `route tooltips must not show the zoned departure time, got ${JSON.stringify(tip)}`);
+      await page.keyboard.press('Escape');
+    });
+
+    await step('a move with nothing visible outside the zones is hidden entirely', async () => {
+      // Zone the Osaka end too: only the single 11:15 GPS point remains outside, which is not a drawable route.
+      await page.evaluate(() => window.__pathBrowserTest.addZone(34.702485, 135.495951, 50));
+      await page.evaluate(() => window.__pathBrowserTest.openDayView('2024-01-20'));
+      await page.waitForSelector('#day-view-overlay:not([hidden])');
+      const st = await dayState();
+      assert(!st.items.includes('move'), `the move should be hidden, got ${JSON.stringify(st.items)}`);
+      assert(!(await page.textContent('#day-view-summary')).includes('移動'), 'the summary must not count the hidden move');
+      await page.keyboard.press('Escape');
+      await page.evaluate(() => window.__pathBrowserTest.clearZones());
+    });
+
     assert.deepStrictEqual(pageErrors, [], 'uncaught renderer errors:\n' + pageErrors.join('\n'));
     console.log(`\nAll E2E checks passed (${stepNames.length} steps).`);
   } finally {
