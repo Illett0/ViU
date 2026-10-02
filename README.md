@@ -16,6 +16,7 @@ Node.jsの知識がなくても使えます。[Releases](../../releases)ペー�
 
 ```bash
 npm install
+npm run setup   # インストール時のスクリプト実行を許可制にしているため、許可済みのものを実行（初回・依存関係更新時のみでOK）
 npm start
 ```
 
@@ -144,6 +145,7 @@ renderer/app.mjs              画面遷移・状態管理・イベント配線
 
 ```bash
 npm install
+npm run setup   # electron-winstaller等、ビルドに必要なインストールスクリプトを許可実行
 npm run dist
 ```
 

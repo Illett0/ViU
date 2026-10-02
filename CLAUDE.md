@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm install              # install dependencies
+npm install               # install dependencies (scripts are blocked by .npmrc's ignore-scripts=true)
+npm run setup              # run only the allow-listed install scripts (lavamoat.allowScripts in package.json) — needed once after install/dependency changes, e.g. for electron-winstaller
 npm start                 # run the app (electron .) — opens a native file-picker dialog on launch
 npm run dist               # electron-builder: produces dist/ViU Setup <version>.exe (Windows NSIS, x64 only)
 npm run fetch:boundaries   # regenerate data/municipalities.geojson from the 1% simplification (47 files, requires network) — one-off, not run in normal dev
