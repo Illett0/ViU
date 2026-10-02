@@ -26,6 +26,7 @@ import {
   computePrefectureAggregates,
   computeMunicipalityAggregates,
   computeConquestRates,
+  isPassOnly,
   buildMunicipalityIndex,
   computeModalVisitLocation,
   municipalityName,
@@ -771,8 +772,10 @@ function render() {
 
   const visitedPrefCount = [...derived.periodAggregates.values()].filter((e) => e.stayCount > 0 || e.firstEpoch != null).length;
   const visitedMuniCount = [...derived.muniAggregates.values()].filter((e) => e.stayCount > 0).length;
+  const passOnlyMuniCount = [...derived.muniAggregates.values()].filter(isPassOnly).length;
   if (state.granularity === 'municipality') {
-    el.prefBadge.innerHTML = `<span class="count-num">${visitedMuniCount}</span> / ${state.raw.municipalities.length} 市区町村`;
+    const passNote = passOnlyMuniCount > 0 ? `<span class="pass-only-note"><span class="pass-only-swatch"></span>通過のみ ${passOnlyMuniCount}</span>` : '';
+    el.prefBadge.innerHTML = `<span class="count-num">${visitedMuniCount}</span> / ${state.raw.municipalities.length} 市区町村${passNote}`;
   } else {
     el.prefBadge.innerHTML = `<span class="count-num">${visitedPrefCount}</span> / ${state.raw.prefectures.length} 県`;
   }
@@ -1220,6 +1223,7 @@ function renderPrefectureDetail(derived, code) {
 
   const totalMuniInPref = state.raw.municipalities.filter((m) => m.prefCode === code).length;
   const visitedMuniInPref = [...derived.muniAggregates.values()].filter((m) => m.prefCode === code && m.stayCount > 0).length;
+  const passOnlyMuniInPref = [...derived.muniAggregates.values()].filter((m) => m.prefCode === code && isPassOnly(m)).length;
 
   const parts = [];
   parts.push('<button class="back-link" data-nav="back">← 日本地図に戻る</button>');
@@ -1234,6 +1238,9 @@ function renderPrefectureDetail(derived, code) {
   parts.push(`<div class="stat-row"><span class="label">合計滞在時間</span><span>${formatDuration(totalDwell)}</span></div>`);
   parts.push(`<div class="stat-row"><span class="label">平均滞在時間</span><span>${formatDuration(avgDwell)}</span></div>`);
   parts.push(`<div class="stat-row"><span class="label">市区町村制覇率</span><span>${visitedMuniInPref} / ${totalMuniInPref}</span></div>`);
+  if (passOnlyMuniInPref > 0) {
+    parts.push(`<div class="stat-row"><span class="label">通過のみの市区町村</span><span>${passOnlyMuniInPref}</span></div>`);
+  }
 
   // Exclusion-zone-filtered rows for ranking/pins/visit-lists, per spec.
   const scopedVisits = derived.displayData.visits.filter((v) => v.prefCode === code);
@@ -1921,6 +1928,15 @@ window.__pathBrowserTest = {
   },
   getMunicipalityAggregates() {
     return [...getDerived().muniAggregates.values()].filter((e) => e.stayCount > 0);
+  },
+  getPassOnlyMunicipalities() {
+    return [...getDerived().muniAggregates.values()].filter(isPassOnly);
+  },
+  getRawLocations() {
+    return {
+      visits: state.raw.visits.map((v) => ({ prefCode: v.prefCode, muniCode: v.muniCode })),
+      pathPoints: state.raw.pathPoints.map((p) => ({ prefCode: p[3], muniCode: p[6] })),
+    };
   },
   getClusterRanking() {
     return computeClusterRanking(getDerived().displayData, { privacy: state.privacy, municipalityByCode: state.municipalityByCode, limit: 20, sortBy: state.sortBy });

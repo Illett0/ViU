@@ -203,14 +203,22 @@ function computePrefectureAggregates(data, prefectureList) {
   return byCode;
 }
 
-// Returns Map<muniCode, {code, name, prefCode, stayCount, placeCount, firstEpoch, lastEpoch}>.
-// Unlike prefectures, municipality "visited" status is based on visits only —
-// timelinePath points were never resolved to a municipality (see parseWorker).
+// Returns Map<muniCode, {code, name, prefCode, stayCount, placeCount, passCount, firstEpoch, lastEpoch}>.
+// Unlike prefectures, municipality "visited" status (and therefore 制覇率) is
+// based on visits only. Merely passing through on a train/car is tracked
+// separately as passCount (timelinePath points resolved to this
+// municipality, see worker/parseWorker.js) — shown as its own lighter
+// "通過のみ" tier on the map, never counted as 制覇.
 // See computePrefectureAggregates above for what stayCount vs. placeCount mean.
 function computeMunicipalityAggregates(data, municipalityList) {
   const byCode = new Map();
   for (const m of municipalityList) {
-    byCode.set(m.code, { code: m.code, name: m.name, prefCode: m.prefCode, stayCount: 0, placeCount: 0, firstEpoch: null, lastEpoch: null });
+    byCode.set(m.code, { code: m.code, name: m.name, prefCode: m.prefCode, stayCount: 0, placeCount: 0, passCount: 0, firstEpoch: null, lastEpoch: null });
+  }
+  for (const p of data.pathPoints) {
+    if (!p[6]) continue;
+    const entry = byCode.get(p[6]);
+    if (entry) entry.passCount += 1;
   }
   const clustersSeen = new Map(); // muniCode -> Set<clusterId>
   for (const v of data.visits) {
@@ -238,6 +246,11 @@ function computeMunicipalityAggregates(data, municipalityList) {
   return byCode;
 }
 
+// A municipality with path points but no stay at all — "通った", not "訪れた".
+function isPassOnly(entry) {
+  return !!entry && entry.stayCount === 0 && entry.passCount > 0;
+}
+
 function visitedCodes(aggregates) {
   const codes = new Set();
   for (const entry of aggregates.values()) {
@@ -254,14 +267,17 @@ function computeConquestRates(muniAggregates, municipalityList, prefectureList) 
     totalByPref.set(m.prefCode, (totalByPref.get(m.prefCode) || 0) + 1);
   }
   const visitedByPref = new Map();
+  const passOnlyByPref = new Map();
   for (const entry of muniAggregates.values()) {
     if (entry.stayCount > 0) visitedByPref.set(entry.prefCode, (visitedByPref.get(entry.prefCode) || 0) + 1);
+    else if (isPassOnly(entry)) passOnlyByPref.set(entry.prefCode, (passOnlyByPref.get(entry.prefCode) || 0) + 1);
   }
   return prefectureList
     .map((p) => {
       const total = totalByPref.get(p.code) || 0;
       const visited = visitedByPref.get(p.code) || 0;
-      return { code: p.code, name: p.name, visited, total, rate: total > 0 ? visited / total : 0 };
+      const passOnly = passOnlyByPref.get(p.code) || 0;
+      return { code: p.code, name: p.name, visited, passOnly, total, rate: total > 0 ? visited / total : 0 };
     })
     .sort((a, b) => b.rate - a.rate);
 }
@@ -667,6 +683,7 @@ export {
   computePrefectureAggregates,
   computeMunicipalityAggregates,
   computeConquestRates,
+  isPassOnly,
   visitedCodes,
   buildMunicipalityIndex,
   computeModalVisitLocation,

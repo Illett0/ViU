@@ -1,7 +1,7 @@
 // Leaflet-based map rendering: national heatmap choropleth (prefecture or
 // municipality granularity) + prefecture drill-down.
 
-import { formatPlaceLabel } from './aggregate.mjs';
+import { formatPlaceLabel, isPassOnly } from './aggregate.mjs';
 
 // Single-hue sequential blue for the choropleth (visit-count intensity), kept
 // deliberately far in hue from the orange pins/markers below so pins never
@@ -10,7 +10,10 @@ import { formatPlaceLabel } from './aggregate.mjs';
 const UNVISITED_COLOR = '#e0e0e0';
 const HEAT_LOW = [222, 235, 247]; // #deebf7
 const HEAT_HIGH = [8, 81, 156]; // #08519c
-const PATH_ONLY_COLOR = '#deebf7'; // lightest tier: "passed through, never stayed"
+// "Passed through, never stayed" — a separate pale teal rather than the
+// lightest blue heat tier (which it used to share, #deebf7), so 通過のみ
+// reads as clearly distinct from 訪問1件 at a glance.
+const PATH_ONLY_COLOR = '#b9e2da';
 
 const DEFAULT_BORDER_COLOR = '#151820';
 const SELECTED_BORDER_COLOR = '#ff7f0e';
@@ -47,6 +50,7 @@ function maxPlaceCount(aggregates) {
 }
 
 function fillColorFor(entry, max) {
+  if (isPassOnly(entry)) return PATH_ONLY_COLOR;
   const visited = entry && (entry.stayCount > 0 || entry.firstEpoch != null);
   if (!visited) return UNVISITED_COLOR;
   if (entry.placeCount > 0 && max > 0) {
@@ -54,6 +58,13 @@ function fillColorFor(entry, max) {
     return colorForIntensity(t);
   }
   return PATH_ONLY_COLOR;
+}
+
+function tooltipSuffix(entry) {
+  if (!entry) return '訪問地点 0 件';
+  if (isPassOnly(entry)) return '通過のみ';
+  if (entry.placeCount === 0 && entry.firstEpoch != null) return '通過のみ';
+  return `訪問地点 ${entry.placeCount} 件`;
 }
 
 export function initMap(containerEl) {
@@ -132,9 +143,8 @@ export function renderNational(map, geojsonLayerRef, geojson, aggregates, onClic
     },
     onEachFeature: (feature, lyr) => {
       const entry = aggregates.get(feature.properties.code);
-      const placeCount = entry ? entry.placeCount : 0;
       const isSelected = selectedCode != null && feature.properties.code === selectedCode;
-      lyr.bindTooltip(`${feature.properties.name}（訪問地点 ${placeCount} 件）`, { className: 'pref-tooltip' });
+      lyr.bindTooltip(`${feature.properties.name}（${tooltipSuffix(entry)}）`, { className: 'pref-tooltip' });
       // Leaflet's SVG renderer paints features in the order they were added,
       // so a thick highlighted border can get partially painted-over by a
       // later-drawn neighbouring prefecture along their shared edge — the
@@ -219,8 +229,7 @@ function buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed = fa
       },
       onEachFeature: (feature, lyr) => {
         const entry = aggregates.get(feature.properties.code);
-        const placeCount = entry ? entry.placeCount : 0;
-        lyr.bindTooltip(`${feature.properties.name}（訪問地点 ${placeCount} 件）`, { className: 'pref-tooltip' });
+        lyr.bindTooltip(`${feature.properties.name}（${tooltipSuffix(entry)}）`, { className: 'pref-tooltip' });
         lyr.on('click', () => onClickMuni(feature.properties.code));
         // Same z-order fix as the prefecture layer (see renderNational) — a
         // hovered ward's thicker border would otherwise get partly hidden

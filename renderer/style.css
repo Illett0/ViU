@@ -1083,3 +1083,7 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   right: 0;
   font-size: 20px;
 }
+
+/* 通過のみ (passed through, never stayed) — swatch matches mapView.mjs PATH_ONLY_COLOR */
+.pass-only-note { margin-left: 8px; font-size: 12px; color: var(--color-text-dim); white-space: nowrap; }
+.pass-only-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: #b9e2da; margin-right: 4px; vertical-align: -1px; }

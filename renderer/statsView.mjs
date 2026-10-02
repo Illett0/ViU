@@ -323,7 +323,7 @@ export function renderStats(
     list.innerHTML = conquestRates
       .map(
         (r, i) =>
-          `<li class="place-item" data-code="${r.code}"><span>${i + 1}. ${r.name}</span><span class="rank-count">${r.visited} / ${r.total}（${(r.rate * 100).toFixed(0)}%）</span></li>`
+          `<li class="place-item" data-code="${r.code}"><span>${i + 1}. ${r.name}</span><span class="rank-count">${r.visited} / ${r.total}（${(r.rate * 100).toFixed(0)}%）${r.passOnly ? `<span class="pass-only-note"> ＋通過のみ ${r.passOnly}</span>` : ''}</span></li>`
       )
       .join('');
     container.appendChild(list);
