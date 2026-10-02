@@ -5,6 +5,7 @@ import { buildMunicipalityIndex } from './aggregate.mjs';
 import { el, state, ui, zonesReady } from './context.mjs';
 import { applyPhotoEstimates } from './photos.mjs';
 import { stopTimelapse } from './timelapse.mjs';
+import { handleMapBackgroundClick } from './mapTab.mjs';
 import { render, resetNavigationToNational, scheduleMuniViewportRedraw } from './app.mjs';
 
 export function formatBytes(n) {
@@ -183,6 +184,7 @@ export async function finishLoadingIntoApp() {
   if (!ui.map) {
     ui.map = initMap(el.leafletMapDiv);
     ui.map.on('moveend zoomend', scheduleMuniViewportRedraw);
+    ui.map.on('click', handleMapBackgroundClick);
   }
   applyPrivacyZoomLimit(ui.map, state.privacy);
 

@@ -66,6 +66,16 @@ async function main() {
       await page.click('#btn-photo-lightbox-close');
       const lightboxHiddenAfterClose = await page.evaluate(() => document.getElementById('photo-lightbox-overlay').hidden);
       assert(lightboxHiddenAfterClose, 'the lightbox should close on its close button');
+
+      // Clicking the image itself keeps it open; clicking anywhere else closes it.
+      await thumb.click();
+      await page.click('#photo-lightbox-img');
+      assert(await page.isVisible('#photo-lightbox-overlay'), 'clicking the image itself must not close the lightbox');
+      await page.mouse.click(5, 5);
+      const hiddenAfterBackdrop = await page.evaluate(() => document.getElementById('photo-lightbox-overlay').hidden);
+      assert(hiddenAfterBackdrop, 'clicking outside the image should close the lightbox');
+      const view = await page.evaluate(() => window.__pathBrowserTest.getView());
+      assert.strictEqual(view.view, 'place', 'closing the lightbox must not change the underlying view');
     });
 
     // ---- A place with no photo within the nudge/gallery real-world radius

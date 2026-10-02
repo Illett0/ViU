@@ -95,6 +95,9 @@ export function installTestHooks() {
     getPlaceLabelCache() {
       return { size: state.placeLabelCache.size, entries: [...state.placeLabelCache.entries()], ...getLabelQueueState() };
     },
+    setMapView(lat, lng, zoom) {
+      ui.map.setView([lat, lng], zoom, { animate: false });
+    },
     getMapZoom() {
       return ui.map ? { zoom: ui.map.getZoom(), center: ui.map.getCenter(), context: ui.lastMapContext } : null;
     },

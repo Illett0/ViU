@@ -123,6 +123,7 @@ export const ui = {
   pendingZoneCenter: null,
   currentDetailPrefCode: null,
   currentMarkersByKey: new Map(),
+  keepViewOnce: false, // set by leavePlaceKeepingView (mapTab.mjs): skip the next render's fitBounds/zoom
 };
 
 export const dayViewLayerRef = { layer: null };

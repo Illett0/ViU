@@ -1057,6 +1057,7 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   align-items: center;
   justify-content: center;
   z-index: 2000;
+  cursor: zoom-out; /* clicking anywhere but the image closes it (photos.mjs) */
 }
 #photo-lightbox-panel {
   position: relative;
@@ -1067,6 +1068,7 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
   align-items: center;
 }
 #photo-lightbox-img {
+  cursor: default;
   max-width: 90vw;
   max-height: 80vh;
   border-radius: 6px;

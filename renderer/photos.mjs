@@ -158,4 +158,8 @@ export function wirePhotos() {
   el.btnPhotoToggle.addEventListener('click', togglePhotoLayer);
   el.btnRoutePhotoToggle.addEventListener('click', togglePhotoLayer);
   el.btnPhotoLightboxClose.addEventListener('click', closePhotoLightbox);
+  // Anywhere outside the image itself (dark backdrop, caption) closes it too.
+  el.photoLightboxOverlay.addEventListener('click', (e) => {
+    if (e.target !== el.photoLightboxImg) closePhotoLightbox();
+  });
 }

@@ -71,6 +71,26 @@ export function nudgePhotosAwayFromPins(photos, stayPinLatLngs) {
   });
 }
 
+// 滞在地点 -> its prefecture's ranking, without moving the map: the user has
+// typically zoomed/panned to look around the selected place, and a click on
+// empty map is a "back" gesture, not a request to re-frame the prefecture.
+export function leavePlaceKeepingView() {
+  const view = currentView(state);
+  if (view.view !== 'place') return;
+  ui.keepViewOnce = true;
+  navigateTo(state, 'prefecture', { code: view.params.code });
+  render();
+}
+
+// Map-level click that hit nothing interactive at all (sea, or outside every
+// polygon): same "back" gesture as clicking the backdrop polygon. Clicks on
+// polygons, pins, photo markers, and popups are handled by their own layers.
+export function handleMapBackgroundClick(e) {
+  const target = e.originalEvent && e.originalEvent.target;
+  if (target && target.closest && target.closest('.leaflet-interactive, .leaflet-marker-icon, .leaflet-popup, .marker-cluster')) return;
+  leavePlaceKeepingView();
+}
+
 export function renderMapTab(derived) {
   const view = currentView(state);
   // clusterId/muniCode are included so that switching between two different
@@ -80,8 +100,9 @@ export function renderMapTab(derived) {
   // the very first place click) and then never again, leaving the map
   // stuck wherever it happened to be for every subsequent place selection.
   const context = `${view.view}:${view.params.code ?? ''}:${view.params.clusterId ?? ''}:${view.params.muniCode ?? ''}:${state.granularity}`;
-  const fit = context !== ui.lastMapContext;
+  const fit = context !== ui.lastMapContext && !ui.keepViewOnce;
   ui.lastMapContext = context;
+  ui.keepViewOnce = false;
 
   // Cluster pins are only ever drawn once drilled into a prefecture, so dim
   // the choropleth then (and highlight the selected prefecture's border)
@@ -112,12 +133,14 @@ export function renderMapTab(derived) {
       (code) => {
         // The backdrop covers the entire visible map under a 'place' view,
         // while the actual 滞在地点 pin the user is looking at is a small
-        // circle floating on top of it — any click that merely misses the
-        // pin (i.e. most of the screen) lands here instead. When `code` is
-        // the prefecture already selected, that's not a "switch prefecture"
-        // gesture, it's a misclick, so it must not reset the drilled-down
-        // place selection back to the bare prefecture ranking.
-        if (code === selectedCode) return;
+        // circle floating on top of it. A click on the selected prefecture's
+        // own backdrop (i.e. anywhere that isn't a pin) means "done with this
+        // place" — go back to the prefecture ranking, keeping the current
+        // zoom/position rather than re-fitting to the whole prefecture.
+        if (code === selectedCode) {
+          leavePlaceKeepingView();
+          return;
+        }
         navigateTo(state, 'prefecture', { code });
         render();
       },
@@ -184,9 +207,10 @@ export function renderMapTab(derived) {
         state.muniGeoJSON,
         prefCode,
         derived.muniAggregates,
-        () => {
-          // Already inside this prefecture; municipality clicks here just focus the detail panel, handled via the marker/list instead.
-        },
+        // Clicking a municipality polygon (i.e. anywhere that isn't a pin)
+        // while a 滞在地点 is selected goes back to the prefecture ranking,
+        // same as the prefecture-granularity backdrop above.
+        () => leavePlaceKeepingView(),
         { dimmed: true }
       );
     }
