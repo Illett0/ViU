@@ -34,10 +34,33 @@ let privacyModeEnabled = true;
 let prefectureGeoJSONCache = null;
 let municipalityGeoJSONCache = null;
 
+// A launch right after installing/updating (see build/installer.nsh) should
+// not steal focus: the user may well be working in another app while the
+// installer finishes. The marker is consumed on first read so only that one
+// launch is affected, and ignored if stale (the "run ViU" box was unchecked
+// and the user starts ViU themselves much later — that launch should behave
+// normally). PATHBROWSER_TEST_QUIET_LAUNCH exercises the same path in E2E,
+// where there's no installer.
+const QUIET_LAUNCH_MARKER_MAX_AGE_MS = 10 * 60 * 1000;
+
+function consumeQuietLaunchMarker() {
+  if (process.argv.includes('--updated') || process.env.PATHBROWSER_TEST_QUIET_LAUNCH) return true;
+  const marker = path.join(path.dirname(process.execPath), 'installed-launch.marker');
+  try {
+    const { mtimeMs } = fs.statSync(marker);
+    fs.unlinkSync(marker);
+    return Date.now() - mtimeMs < QUIET_LAUNCH_MARKER_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
+  const quietLaunch = consumeQuietLaunchMarker();
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
+    show: false,
     icon: path.join(__dirname, 'build', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -48,6 +71,22 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  mainWindow.once('ready-to-show', () => {
+    if (!quietLaunch) {
+      mainWindow.show();
+      return;
+    }
+    // Appear only as a minimized taskbar button — never activated, never
+    // drawn over the app the user is using — and flash it so it's still
+    // noticeable that ViU is ready. Flashing stops once the user opens it.
+    // minimize() on a not-yet-shown window maps to SW_SHOWMINNOACTIVE on
+    // Windows (no showInactive() first, which would briefly draw the window
+    // on top of the user's work).
+    mainWindow.minimize();
+    mainWindow.flashFrame(true);
+    mainWindow.once('focus', () => mainWindow.flashFrame(false));
+  });
 
   // target="_blank" links (issue #15's export-instructions guide links to
   // Google's own timeline/Takeout pages) would otherwise silently do nothing —
