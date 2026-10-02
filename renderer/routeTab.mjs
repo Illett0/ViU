@@ -2,11 +2,11 @@
 
 import { clearMarkers } from './mapView.mjs';
 import { initRouteMap, renderRoute, clearRoute, colorForMode, renderDayRoute, lineSampleSvg, formatClock } from './routeView.mjs';
-import { renderPhotoLayer, clearPhotoLayer } from './photoView.mjs';
+import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, MAX_GALLERY_PHOTOS } from './photoView.mjs';
 import { modeLabel, formatDuration } from './statsView.mjs';
 import { applyPrivacy, applyExclusionZones, municipalityName, computeModalVisitLocation, dwellMs, escapeHtml } from './aggregate.mjs';
-import { dayViewLayerRef, dayViewMarkerLayerRef, el, routeLayerRef, routePhotoLayerRef, state, ui } from './context.mjs';
-import { getVisiblePhotos, openPhotoLightbox, resolvePlaceName } from './photos.mjs';
+import { dayViewLayerRef, dayViewMarkerLayerRef, dayViewPhotoLayerRef, el, routeLayerRef, routePhotoLayerRef, state, ui } from './context.mjs';
+import { getVisiblePhotos, openPhotoLightbox, resolvePlaceName, photosForDay } from './photos.mjs';
 import { enqueueLabelFetch, onPlaceLabelUpdated } from './labels.mjs';
 import { getDerived } from './app.mjs';
 
@@ -93,8 +93,11 @@ export function renderRouteTab(derived) {
 const STOP_FILL = '#ff7f0e'; // same orange as the main map's stay pins
 const STOP_TEXT = '#1a1a1a'; // dark digits on orange: ~8:1 (white would be ~2.9:1)
 
-let dayView = null; // { dateStr, dates, segments, segLayers, stopMarkers, items, opener }
+let dayView = null; // { dateStr, dates, segments, segLayers, stopMarkers, items, moves, photos, opener }
 let unsubscribeLabels = null;
+let dayPhotosVisible = true; // remembered across days/openings within a session
+let dayGalleryCancel = null; // cancels in-flight thumbnail fetches of the day's photo gallery
+const DAY_STOP_PANE = 'dayStopPane'; // above the photo pane (640), so numbered stops stay on top
 
 function formatKm(meters) {
   return (meters / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 1 }) + ' km';
@@ -117,7 +120,14 @@ function dayDisplayData() {
 function datesWithData(displayData) {
   const dates = new Set();
   for (const s of displayData.pathSegments || []) if (s.dateStr) dates.add(s.dateStr);
-  if (!state.privacy) for (const v of displayData.visits || []) if (v.dateStr) dates.add(v.dateStr);
+  if (!state.privacy) {
+    for (const v of displayData.visits || []) if (v.dateStr) dates.add(v.dateStr);
+    for (const p of state.photos) {
+      if (p.takenAtMs == null) continue;
+      const d = new Date(p.takenAtMs);
+      dates.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+  }
   return [...dates].sort();
 }
 
@@ -180,6 +190,9 @@ function renderLegend(segments, moves) {
   });
   if (segments.some((s) => s.inferred)) {
     items.push(`<li class="legend-item">${lineSampleSvg('UNKNOWN', { inferred: true })}<span>推定区間（詳細な経路データなし）</span></li>`);
+  }
+  if (dayPhotosVisible && dayView.photos.length > 0) {
+    items.push(`<li class="legend-item"><span aria-hidden="true">&#128247;</span><span>写真（${dayView.photos.length}枚）</span></li>`);
   }
   if (dayView.stopMarkers.length > 0) {
     items.push(
@@ -272,6 +285,36 @@ function focusItemOnMap(item) {
   if (pts.length > 0) ui.dayViewMap.fitBounds(L.latLngBounds(pts), { padding: [40, 40], animate });
 }
 
+// The day's photos: pins on the map (same clustered photo layer as the main
+// maps) plus a thumbnail gallery under the timeline; both open the shared
+// lightbox. Toggled by the header's camera button.
+function renderDayPhotos() {
+  if (dayGalleryCancel) {
+    dayGalleryCancel();
+    dayGalleryCancel = null;
+  }
+  const photos = dayView.photos;
+  el.btnDayViewPhotos.hidden = photos.length === 0;
+  el.dayViewPhotoCount.textContent = photos.length ? String(photos.length) : '';
+  el.btnDayViewPhotos.setAttribute('aria-pressed', String(dayPhotosVisible));
+  el.btnDayViewPhotos.setAttribute('aria-label', `この日の写真（${photos.length}枚）を${dayPhotosVisible ? '非表示にする' : '表示する'}`);
+  el.btnDayViewPhotos.classList.toggle('active', dayPhotosVisible);
+
+  const show = dayPhotosVisible && photos.length > 0;
+  el.dayViewPhotos.hidden = !show;
+  if (!show) {
+    clearPhotoLayer(ui.dayViewMap, dayViewPhotoLayerRef);
+    el.dayViewPhotoGallery.innerHTML = '';
+    return;
+  }
+  renderPhotoLayer(ui.dayViewMap, dayViewPhotoLayerRef, photos, { resolvePlaceName, onOpenLightbox: openPhotoLightbox });
+  const shown = photos.slice(0, MAX_GALLERY_PHOTOS);
+  el.dayViewPhotoGallery.innerHTML =
+    galleryHtml(shown, shown.length) +
+    (photos.length > shown.length ? `<p class="empty-note">ほか${photos.length - shown.length}枚は地図上の写真ピンから表示できます。</p>` : '');
+  dayGalleryCancel = loadGalleryThumbnails(el.dayViewPhotoGallery, shown, { onOpenLightbox: openPhotoLightbox });
+}
+
 function renderSummary({ moves, visits }) {
   const totalDist = moves.reduce((s, a) => s + (a.distanceMeters || 0), 0);
   const moveMs = moves.reduce((s, a) => s + (a.endEpoch != null ? Math.max(0, a.endEpoch - a.startEpoch) : 0), 0);
@@ -286,7 +329,7 @@ function renderDay(dateStr) {
   const dates = datesWithData(displayData);
   const segments = (displayData.pathSegments || []).filter((s) => s.dateStr === dateStr);
   const timeline = buildTimeline(dateStr, displayData, segments);
-  dayView = { ...dayView, dateStr, dates, segments, segLayers: [], stopMarkers: [], items: timeline.items };
+  dayView = { ...dayView, dateStr, dates, segments, segLayers: [], stopMarkers: [], items: timeline.items, moves: timeline.moves, photos: photosForDay(dateStr) };
 
   el.dayViewTitle.textContent = `${formatDateTitle(dateStr)}の経路`;
   const i = dates.indexOf(dateStr);
@@ -300,8 +343,11 @@ function renderDay(dateStr) {
   if (segments.length === 0 && timeline.visits.length === 0) {
     el.dayViewMessage.hidden = false;
     el.dayViewMessage.textContent = 'この日の詳細な経路データはありません。';
-    el.dayViewLegend.innerHTML = '';
     renderTimelineList();
+    renderDayPhotos();
+    renderLegend(segments, timeline.moves);
+    const photoPoints = dayPhotosVisible ? dayView.photos.map((p) => [p.lat, p.lng]) : [];
+    if (photoPoints.length > 0) ui.dayViewMap.fitBounds(L.latLngBounds(photoPoints), { padding: [30, 30], maxZoom: 15, animate: false });
     return;
   }
   el.dayViewMessage.hidden = true;
@@ -316,6 +362,7 @@ function renderDay(dateStr) {
       keyboard: false, // reachable via the timeline list instead (same content, in order)
       title: `${n}. ${placeNameFor(v)}`,
       riseOnHover: true,
+      pane: DAY_STOP_PANE,
     });
     marker.bindTooltip(
       () => `${n}. ${escapeHtml(placeNameFor(v))}<br>${formatClock(v.startEpoch)}–${formatClock(v.endEpoch)}（滞在 ${formatDuration(dwellMs(v))}）`,
@@ -333,11 +380,16 @@ function renderDay(dateStr) {
     dayView.stopMarkers.push(marker);
   });
 
+  renderDayPhotos();
   renderLegend(segments, timeline.moves);
   renderTimelineList();
   requestPlaceLabels(timeline.visits, displayData);
 
-  const allPoints = [...segments.flatMap((s) => s.points || []), ...timeline.visits.map((v) => [v.lat, v.lng])];
+  const allPoints = [
+    ...segments.flatMap((s) => s.points || []),
+    ...timeline.visits.map((v) => [v.lat, v.lng]),
+    ...(dayPhotosVisible ? dayView.photos.map((p) => [p.lat, p.lng]) : []),
+  ];
   if (allPoints.length > 0) ui.dayViewMap.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30], animate: false });
 }
 
@@ -361,7 +413,11 @@ export function openDayView(dateStr) {
   if (!state.raw) return;
   const opener = document.activeElement;
   el.dayViewOverlay.hidden = false;
-  if (!ui.dayViewMap) ui.dayViewMap = initRouteMap(el.dayViewMapDiv);
+  if (!ui.dayViewMap) {
+    ui.dayViewMap = initRouteMap(el.dayViewMapDiv);
+    ui.dayViewMap.createPane(DAY_STOP_PANE);
+    ui.dayViewMap.getPane(DAY_STOP_PANE).style.zIndex = 650;
+  }
   // The map container was `hidden` until just now, so Leaflet hasn't been
   // able to measure it yet — measure before fitting bounds.
   ui.dayViewMap.invalidateSize();
@@ -384,6 +440,10 @@ function stepDay(delta) {
 export function closeDayView() {
   if (el.dayViewOverlay.hidden) return;
   el.dayViewOverlay.hidden = true;
+  if (dayGalleryCancel) {
+    dayGalleryCancel();
+    dayGalleryCancel = null;
+  }
   const opener = dayView && dayView.opener;
   dayView = null;
   if (opener && document.contains(opener)) opener.focus();
@@ -399,6 +459,12 @@ export function wireRouteTab() {
   el.btnDayViewClose.addEventListener('click', closeDayView);
   el.btnDayViewPrev.addEventListener('click', () => stepDay(-1));
   el.btnDayViewNext.addEventListener('click', () => stepDay(1));
+  el.btnDayViewPhotos.addEventListener('click', () => {
+    if (!dayView) return;
+    dayPhotosVisible = !dayPhotosVisible;
+    renderDayPhotos();
+    renderLegend(dayView.segments, dayView.moves);
+  });
   // A click on the dimmed backdrop (outside the dialog) closes it.
   el.dayViewOverlay.addEventListener('click', (e) => {
     if (e.target === el.dayViewOverlay) closeDayView();
@@ -436,5 +502,8 @@ export function getDayViewState() {
     items: dayView.items.map((it) => it.kind),
     stops: dayView.stopMarkers.length,
     segments: dayView.segments.length,
+    photos: dayView.photos.length,
+    photosVisible: dayPhotosVisible,
+    photoPins: dayViewPhotoLayerRef.markersByPath ? dayViewPhotoLayerRef.markersByPath.size : 0,
   };
 }

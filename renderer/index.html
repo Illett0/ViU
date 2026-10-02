@@ -124,6 +124,7 @@
             <button id="btn-day-view-next" class="btn btn-icon" aria-label="次の記録日（→キー）" title="次の記録日（→）">&#8250;</button>
           </div>
           <p id="day-view-summary" class="day-view-summary"></p>
+          <button id="btn-day-view-photos" class="btn btn-icon" aria-pressed="true" title="この日の写真を表示/非表示" hidden>&#128247; <span id="day-view-photo-count"></span></button>
           <button id="btn-day-view-close" class="btn" aria-label="閉じる（Escキー）" title="閉じる（Esc）">閉じる</button>
         </div>
         <div id="day-view-body">
@@ -135,6 +136,10 @@
           <section id="day-view-timeline-wrap" aria-labelledby="day-view-timeline-heading">
             <h3 id="day-view-timeline-heading">タイムライン</h3>
             <ol id="day-view-timeline" class="day-view-timeline"></ol>
+            <section id="day-view-photos" aria-labelledby="day-view-photos-heading" hidden>
+              <h3 id="day-view-photos-heading">この日の写真</h3>
+              <div id="day-view-photo-gallery"></div>
+            </section>
           </section>
         </div>
       </div>

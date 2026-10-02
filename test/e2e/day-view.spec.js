@@ -74,6 +74,38 @@ async function main() {
       assert.strictEqual(after.zoom, before.zoom, 'the day view must not move the main map');
     });
 
+    await step("the day's photos show as map pins and a gallery; the camera button toggles them", async () => {
+      let st = await dayState();
+      assert.strictEqual(st.photos, 3, `2024-01-20 has 3 fixture photos, got ${st.photos}`);
+      assert(st.photosVisible && st.photoPins === 3, `expected 3 photo pins, got ${st.photoPins}`);
+      assert(await page.isVisible('#day-view-photos'), 'the photo gallery section should be visible');
+      assert.strictEqual(await page.$$eval('#day-view-photo-gallery .photo-cluster-popup-thumb-wrap', (n) => n.length), 3);
+      assert.strictEqual(await page.getAttribute('#btn-day-view-photos', 'aria-pressed'), 'true');
+      assert((await page.textContent('#day-view-legend')).includes('写真（3枚）'));
+
+      await page.click('#btn-day-view-photos');
+      st = await dayState();
+      assert(!st.photosVisible && st.photoPins === 0, 'toggling off should remove the photo pins');
+      assert(!(await page.isVisible('#day-view-photos')), 'toggling off should hide the gallery');
+      assert.strictEqual(await page.getAttribute('#btn-day-view-photos', 'aria-pressed'), 'false');
+
+      await page.click('#btn-day-view-photos');
+      assert.strictEqual((await dayState()).photoPins, 3, 'toggling back on should restore the pins');
+    });
+
+    await step('a gallery thumbnail opens the lightbox; Esc closes only the lightbox', async () => {
+      await page.waitForSelector('#day-view-photo-gallery .photo-cluster-popup-thumb-wrap img', { timeout: 15000 });
+      const label = await page.getAttribute('#day-view-photo-gallery .photo-cluster-popup-thumb-wrap', 'aria-label');
+      assert(/^写真を拡大表示: osaka_\d\.jpg/.test(label), `thumbnail should be labelled with just the file name, got "${label}"`);
+      await page.click('#day-view-photo-gallery .photo-cluster-popup-thumb-wrap');
+      await page.waitForSelector('#photo-lightbox-overlay:not([hidden])');
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('#photo-lightbox-overlay', { state: 'hidden' });
+      assert(await page.isVisible('#day-view-overlay'), 'the day view must stay open when Esc closes the lightbox');
+      const focusInDialog = await page.evaluate(() => document.getElementById('day-view-panel').contains(document.activeElement));
+      assert(focusInDialog, 'focus should return into the day view after the lightbox closes');
+    });
+
     await step('Esc closes the dialog and returns focus to the date that opened it', async () => {
       await page.keyboard.press('Escape');
       await page.waitForSelector('#day-view-overlay', { state: 'hidden' });

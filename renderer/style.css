@@ -1145,6 +1145,7 @@ table.mode-table th { color: var(--color-text-dim); font-weight: 500; }
 }
 /* Stage3 (issue #1): dashed outline mirrors the map pin's dashed border, so
    the "this location is a guess" cue is consistent across both surfaces. */
+.photo-cluster-popup-thumb-wrap:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 1px; }
 .photo-cluster-popup-thumb-wrap--estimated { outline: 2px dashed #e3a12c; outline-offset: -2px; }
 /* contain, not cover — most phone photos are 4:3/16:9, not square, and
    cropping to fill the square box was cutting off a visible chunk of every

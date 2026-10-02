@@ -28,6 +28,21 @@ export function photoMatchesPeriod(photo) {
   return true;
 }
 
+// Photos taken on one local calendar day (host timezone, same as
+// photoMatchesPeriod), for the per-day route view — independent of the
+// year/month period filter. Same privacy/exclusion-zone rules as the map layer.
+export function photosForDay(dateStr) {
+  if (state.privacy) return [];
+  return state.photos
+    .filter((p) => {
+      if (p.takenAtMs == null || isInAnyZone(p.lat, p.lng, state.zones)) return false;
+      const d = new Date(p.takenAtMs);
+      const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return local === dateStr;
+    })
+    .sort((a, b) => a.takenAtMs - b.takenAtMs);
+}
+
 export function getVisiblePhotos() {
   if (state.privacy) return []; // Photo layer is disabled entirely under privacy mode, like the route map.
   return state.photos.filter((p) => photoMatchesPeriod(p) && !isInAnyZone(p.lat, p.lng, state.zones));
@@ -48,18 +63,28 @@ export function photosForPlace(memberVisits) {
   return photos.filter((photo) => memberVisits.some((v) => distanceMeters(photo.lat, photo.lng, v.lat, v.lng) <= triggerMeters));
 }
 
+let lightboxOpener = null;
+
 export function openPhotoLightbox(dataUrl, photo) {
+  if (el.photoLightboxOverlay.hidden) lightboxOpener = document.activeElement;
   el.photoLightboxImg.src = dataUrl;
   const name = photo.filePath.split(/[\\/]/).pop();
   const place = resolvePlaceName(photo.lat, photo.lng);
   const estimatedTag = photo.source === 'estimated' ? '（位置は推定）' : null;
   el.photoLightboxCaption.textContent = [name, place, estimatedTag].filter(Boolean).join(' — ');
   el.photoLightboxOverlay.hidden = false;
+  el.btnPhotoLightboxClose.focus();
+}
+
+export function isPhotoLightboxOpen() {
+  return !el.photoLightboxOverlay.hidden;
 }
 
 export function closePhotoLightbox() {
   el.photoLightboxOverlay.hidden = true;
   el.photoLightboxImg.src = ''; // Release the (potentially large) decoded image promptly.
+  if (lightboxOpener && document.contains(lightboxOpener)) lightboxOpener.focus();
+  lightboxOpener = null;
 }
 
 export function togglePhotoLayer() {
@@ -158,6 +183,19 @@ export function wirePhotos() {
   el.btnPhotoToggle.addEventListener('click', togglePhotoLayer);
   el.btnRoutePhotoToggle.addEventListener('click', togglePhotoLayer);
   el.btnPhotoLightboxClose.addEventListener('click', closePhotoLightbox);
+  // Esc closes the lightbox (and only the lightbox, when it's open on top of
+  // another dialog such as the day view — capture phase so it runs first).
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key === 'Escape' && isPhotoLightboxOpen()) {
+        e.preventDefault();
+        e.stopPropagation();
+        closePhotoLightbox();
+      }
+    },
+    true
+  );
   // Anywhere outside the image itself (dark backdrop, caption) closes it too.
   el.photoLightboxOverlay.addEventListener('click', (e) => {
     if (e.target !== el.photoLightboxImg) closePhotoLightbox();

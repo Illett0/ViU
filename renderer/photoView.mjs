@@ -127,8 +127,22 @@ export function loadGalleryThumbnails(containerEl, photos, { onOpenLightbox } = 
       if (cancelled) return;
       if (result && result.dataUrl) {
         wrap.innerHTML = `<img src="${result.dataUrl}" alt="" />`;
-        wrap.addEventListener('click', () => {
+        const open = () => {
           if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
+        };
+        // Keyboard-operable like a button (and focusable, so focus can
+        // return here when the lightbox closes).
+        const name = photo.filePath.split(/[\\/]/).pop();
+        const when = photo.takenAtMs != null ? new Date(photo.takenAtMs).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        wrap.setAttribute('role', 'button');
+        wrap.setAttribute('tabindex', '0');
+        wrap.setAttribute('aria-label', `写真を拡大表示: ${name}${when ? `（${when}）` : ''}${photo.source === 'estimated' ? '、位置は推定' : ''}`);
+        wrap.addEventListener('click', open);
+        wrap.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
         });
       } else {
         wrap.innerHTML = '<span class="photo-popup-unsupported">非対応</span>';

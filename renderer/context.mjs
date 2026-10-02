@@ -104,6 +104,10 @@ export const el = {
   dayViewTimeline: document.getElementById('day-view-timeline'),
   btnDayViewPrev: document.getElementById('btn-day-view-prev'),
   btnDayViewNext: document.getElementById('btn-day-view-next'),
+  btnDayViewPhotos: document.getElementById('btn-day-view-photos'),
+  dayViewPhotoCount: document.getElementById('day-view-photo-count'),
+  dayViewPhotos: document.getElementById('day-view-photos'),
+  dayViewPhotoGallery: document.getElementById('day-view-photo-gallery'),
   btnPhotoToggle: document.getElementById('btn-photo-toggle'),
   btnRoutePhotoToggle: document.getElementById('btn-route-photo-toggle'),
   photoLinkedFolder: document.getElementById('photo-linked-folder'),
@@ -133,6 +137,7 @@ export const ui = {
 
 export const dayViewLayerRef = { layer: null };
 export const dayViewMarkerLayerRef = { layer: null };
+export const dayViewPhotoLayerRef = { layer: null };
 export const geojsonLayerRef = { layer: null };
 export const photoLayerRef = { layer: null }; // 制覇マップ側の写真レイヤー
 export const routePhotoLayerRef = { layer: null }; // 経路マップ側の写真レイヤー（別Leafletインスタンスなので別レイヤー参照が要る）
