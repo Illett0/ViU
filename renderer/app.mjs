@@ -204,7 +204,10 @@ export function setPrivacy(value) {
   state.privacy = value;
   window.pathBrowser.setPrivacyMode(value);
   el.btnPrivacy.classList.toggle('off', !state.privacy);
-  el.privacyLabel.textContent = state.privacy ? 'プライバシーモード ON' : 'プライバシーモード OFF';
+  // The "プライバシーモード " prefix is hidden on narrow windows (CSS) to keep the
+  // header on fewer rows; the button's aria-label keeps the full name.
+  el.privacyLabel.innerHTML = `<span class="privacy-label-prefix">プライバシーモード </span>${state.privacy ? 'ON' : 'OFF'}`;
+  el.btnPrivacy.setAttribute('aria-label', `プライバシーモード ${state.privacy ? 'ON' : 'OFF'}（クリックで切り替え）`);
   document.getElementById('privacy-icon').textContent = state.privacy ? '\u{1F512}' : '\u{1F513}';
   if (ui.map) applyPrivacyZoomLimit(ui.map, state.privacy);
   resetNavigationToNational();

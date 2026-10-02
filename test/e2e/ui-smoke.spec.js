@@ -24,6 +24,36 @@ async function main() {
   try {
     await completeOnboarding(page, step);
 
+    await step('layout: no window-level scrollbars, zoom buttons clear of the map badges', async () => {
+      const overlaps = (a, b) => a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      for (const tab of ['map', 'route']) {
+        await page.click(`.tab-btn[data-tab="${tab}"]`);
+        await settle(page);
+        const m = await page.evaluate(() => {
+          const d = document.documentElement;
+          const rect = (sel) => {
+            const n = document.querySelector(sel);
+            if (!n || n.offsetParent === null) return null;
+            const r = n.getBoundingClientRect();
+            return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+          };
+          return {
+            scrollW: d.scrollWidth, clientW: d.clientWidth, scrollH: d.scrollHeight, clientH: d.clientHeight,
+            zoom: rect('#leaflet-map .leaflet-control-zoom'),
+            countBadge: rect('#prefecture-count-badge'),
+            islandBadge: rect('#island-badge'),
+          };
+        });
+        assert(m.scrollW <= m.clientW && m.scrollH <= m.clientH, `${tab} tab: the window must not scroll (${JSON.stringify(m)})`);
+        if (tab === 'map') {
+          assert(m.zoom, 'the main map should have zoom buttons');
+          assert(!overlaps(m.zoom, m.countBadge), 'zoom buttons must not overlap the count badge');
+          assert(!overlaps(m.zoom, m.islandBadge), 'zoom buttons must not overlap the 離島 badge');
+        }
+      }
+      assertNoErrors();
+    });
+
     await step('route tab renders with a legend; clicking a mode toggles it off and on', async () => {
       await page.click('.tab-btn[data-tab="route"]');
       await page.waitForSelector('#route-screen:not([hidden])');

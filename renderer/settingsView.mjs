@@ -2,8 +2,11 @@
 // small Leaflet map instance. Pure rendering helpers only — app.mjs owns the
 // click/slider/button interaction wiring and persistence.
 
+import { addZoomControl } from './mapView.mjs';
+
 export function initZoneMap(containerEl) {
-  const map = L.map(containerEl, { center: [36.5, 138], zoom: 5, minZoom: 3 });
+  const map = L.map(containerEl, { center: [36.5, 138], zoom: 5, minZoom: 3, zoomControl: false });
+  addZoomControl(map);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 18,

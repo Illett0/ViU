@@ -67,13 +67,24 @@ function tooltipSuffix(entry) {
   return `訪問地点 ${entry.placeCount} 件`;
 }
 
+// Every map in the app puts its +/- buttons bottom-right (above the OSM
+// attribution) instead of Leaflet's default top-left, which collided with the
+// count badge / 離島 badge overlays that live in that corner. Japanese
+// labels double as the buttons' accessible names.
+export function addZoomControl(map) {
+  L.control.zoom({ position: 'bottomright', zoomInTitle: '拡大', zoomOutTitle: '縮小' }).addTo(map);
+  return map;
+}
+
 export function initMap(containerEl) {
   const map = L.map(containerEl, {
     center: [36.5, 138],
     zoom: 5,
     minZoom: 4,
     worldCopyJump: false,
+    zoomControl: false,
   });
+  addZoomControl(map);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',

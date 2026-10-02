@@ -2,6 +2,8 @@
 // timelinePath segments as polylines, colored by the transport mode borrowed
 // from the nearest activity in time (see worker/parseWorker.js).
 
+import { addZoomControl } from './mapView.mjs';
+
 // Design: 電車・地下鉄・路面電車 share one color family (red), バス・タクシー
 // share another (blue) — both deliberate per-family groupings (shades within
 // a family are told apart by label/tooltip, not by color). Every other
@@ -58,7 +60,9 @@ export function initRouteMap(containerEl) {
     // matters now that mode-accurate rendering can split one raw path
     // segment into several polylines (see MAX_SEGMENTS_TO_RENDER below).
     preferCanvas: true,
+    zoomControl: false,
   });
+  addZoomControl(map);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',

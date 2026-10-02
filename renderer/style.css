@@ -22,6 +22,11 @@
 html, body {
   margin: 0;
   height: 100%;
+  /* App shell: the window itself never scrolls — each screen scrolls
+     internally. Page-level scrollbars used to appear on the route tab from a
+     ~2px overflow feedback loop (horizontal bar -> shorter viewport ->
+     vertical bar), shrinking and shifting the map. */
+  overflow: hidden;
   background: var(--color-bg);
   color: var(--color-text);
 }
@@ -35,6 +40,10 @@ html, body {
 /* ---------- Header ---------- */
 #app-header {
   display: flex;
+  /* On narrower windows the header wraps onto a second row rather than
+     squeezing labels into one-character-wide vertical text. */
+  flex-wrap: wrap;
+  row-gap: 8px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -48,6 +57,11 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.header-right { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; margin-left: auto; }
+#app-header .btn, #app-header label { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .privacy-label-prefix { display: none; }
 }
 
 #app-header h1 {
@@ -66,6 +80,10 @@ html, body {
 
 #breadcrumb {
   flex: 1;
+  min-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: center;
   color: var(--color-text-dim);
   font-size: 14px;
@@ -143,9 +161,18 @@ html, body {
   transition: opacity 0.12s ease, transform 0.12s ease;
   z-index: 50;
 }
-.btn-icon:hover:not(:disabled)::after {
+.btn-icon:hover:not(:disabled)::after,
+.btn-icon:focus-visible::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+/* Buttons in a top bar have no room above them — open the tooltip downward. */
+#app-header .btn-icon::after,
+#day-view-header .btn-icon::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+  z-index: 1100;
 }
 
 .btn-privacy {
@@ -220,6 +247,7 @@ html, body {
 }
 
 #welcome-screen, #progress-screen, #privacy-notice-screen {
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -456,6 +484,8 @@ html, body {
   top: auto;
   bottom: 12px;
   left: 12px;
+  /* leave room for the bottom-right zoom control (see addZoomControl) */
+  max-width: calc(100% - 84px);
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -468,7 +498,10 @@ html, body {
   position: fixed;
   inset: 0;
   background: rgba(10, 12, 16, 0.6);
-  z-index: 900;
+  /* Above Leaflet's own controls/attribution (z-index 1000), which otherwise
+     paint through the dialog from the main map behind it; below the photo
+     lightbox (2000), which can open on top of this dialog. */
+  z-index: 1500;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -519,7 +552,7 @@ html, body {
 .day-view-legend {
   list-style: none;
   margin: 0;
-  max-width: calc(100% - 24px);
+  max-width: calc(100% - 84px);
   background: rgba(255, 255, 255, 0.94);
   color: #1b1e24;
   border-color: #c9ccd3;
