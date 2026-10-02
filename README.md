@@ -133,6 +133,7 @@ lib/geoCache.js               市区町村判定・クラスタリング結果�
 lib/nominatim.js              Nominatim逆ジオコーディング（レート制限・キャッシュ）
 lib/exclusionZones.js         除外ゾーンの永続化（ユーザーデータフォルダ）
 lib/coords.js                 座標文字列パース・距離計算のユーティリティ
+lib/locate.js                 地点→市区町村・都道府県の一元判定（海岸線外は最寄り市区町村）
 lib/photoCache.js             写真スキャン結果のディスクキャッシュ・連携フォルダの永続化
 lib/thumbnailCache.js         生成済みサムネイルのディスクキャッシュ
 worker/photoScanWorker.js     写真フォルダの再帰スキャン・Exif/Takeoutメタデータ抽出
@@ -146,7 +147,16 @@ renderer/settingsView.mjs     除外ゾーン設定画面の描画
 renderer/chronologyView.mjs   年表ビューの描画
 renderer/statsView.mjs        移動統計ビューの描画
 renderer/aggregate.mjs        集計・フィルタ・クラスタリング後処理ロジック（DOM非依存）
-renderer/app.mjs              画面遷移・状態管理・イベント配線
+renderer/context.mjs          共有状態（state・DOM参照・地図インスタンス等）
+renderer/app.mjs              集計の派生・描画・画面遷移・イベント配線の統括
+renderer/loading.mjs          最近使ったファイル・ファイル読み込み・再クラスタリング
+renderer/photos.mjs           写真レイヤー・写真スキャン・ライトボックス
+renderer/labels.mjs           詳細地名の順次取得キュー
+renderer/mapTab.mjs           制覇マップタブ（詳細パネル・パンくず）
+renderer/routeTab.mjs         経路マップタブ・日別経路表示
+renderer/timelapse.mjs        タイムラプス再生
+renderer/settings.mjs         設定画面（除外ゾーン・キャッシュ/データ削除）
+renderer/testHooks.mjs        E2Eテスト用フック
 ```
 
 ## 配布用パッケージのビルド
