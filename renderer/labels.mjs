@@ -1,7 +1,7 @@
 // On-demand detail-name (Nominatim/Overpass) fetching for the prefecture-detail
 // ranking rows and their map pin tooltips.
 
-import { computeModalVisitLocation, formatPlaceLabel } from './aggregate.mjs';
+import { computeModalVisitLocation, formatPlaceLabel, escapeHtml } from './aggregate.mjs';
 import { el, state, ui } from './context.mjs';
 
 // ---- On-demand detail-name fetch queue for the prefecture-detail ranking
@@ -12,8 +12,23 @@ let labelQueueRunning = false;
 let labelQueueToken = 0;
 let labelPanelObserver = null;
 
+// Other views showing place names (the day view's timeline list) subscribe
+// here to re-render a row once its detail name arrives.
+const labelListeners = new Set();
+export function onPlaceLabelUpdated(fn) {
+  labelListeners.add(fn);
+  return () => labelListeners.delete(fn);
+}
+
 export function resetLabelQueue() {
   labelQueueToken += 1;
+  // Queued-but-not-started items were marked 'pending' in the cache by
+  // enqueueLabelFetch; drop those marks so a later view can queue them again
+  // (otherwise they'd read "取得中…" forever and never be fetched).
+  for (const { clusterId } of labelQueue) {
+    const entry = state.placeLabelCache.get(clusterId);
+    if (entry && entry.status === 'pending') state.placeLabelCache.delete(clusterId);
+  }
   labelQueue = [];
   if (labelPanelObserver) {
     labelPanelObserver.disconnect();
@@ -31,7 +46,7 @@ export function updateRowLabelDisplay(clusterId) {
   const marker = ui.currentMarkersByKey.get(clusterId);
   if (marker) {
     const muniName = marker.__muniName;
-    if (muniName) marker.setTooltipContent(`${formatPlaceLabel(muniName, entry)} — 滞在 ${marker.__count} 回`);
+    if (muniName) marker.setTooltipContent(`${escapeHtml(formatPlaceLabel(muniName, entry))} — 滞在 ${marker.__count} 回`);
   }
 }
 
@@ -57,13 +72,20 @@ export async function runLabelQueue() {
       } catch {
         result = { label: null, error: 'failed' };
       }
-      if (myToken !== labelQueueToken) break; // panel closed/navigated away mid-fetch — discard
-      state.placeLabelCache.set(clusterId, { status: result.error ? 'error' : 'done', label: result.label });
+      // Keep a fetched result even if the panel that queued it is gone — it's
+      // valid data, and dropping it would leave the entry stuck at 'pending'.
+      // A refusal because privacy mode was turned on mid-flight isn't an
+      // answer, though: forget it so it can be fetched again later.
+      if (result.error === 'privacy-mode') state.placeLabelCache.delete(clusterId);
+      else state.placeLabelCache.set(clusterId, { status: result.error ? 'error' : 'done', label: result.label });
       updateRowLabelDisplay(clusterId);
+      for (const fn of labelListeners) fn(clusterId);
     }
   } finally {
     labelQueueRunning = false;
   }
+  // Items queued by a newer view while the last fetch above was in flight.
+  if (labelQueue.length > 0) runLabelQueue();
 }
 
 // Wires an IntersectionObserver over the ranking rows so only rows that have

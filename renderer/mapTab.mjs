@@ -5,7 +5,7 @@ import { currentView, navigateTo } from './state.mjs';
 import { renderNational, renderNationalMunicipality, renderPrefectureMunicipality, mainlandBounds, renderClusterMarkers, clearMarkers, renderTimelapsePoints, clearTimelapsePoints } from './mapView.mjs';
 import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, MAX_GALLERY_PHOTOS } from './photoView.mjs';
 import { formatDuration } from './statsView.mjs';
-import { distanceMeters, destinationPoint, isPassOnly, computeModalVisitLocation, municipalityName, formatPlaceLabel, dwellMs, computeClusterRanking } from './aggregate.mjs';
+import { distanceMeters, destinationPoint, isPassOnly, computeModalVisitLocation, municipalityName, formatPlaceLabel, escapeHtml, dwellMs, computeClusterRanking } from './aggregate.mjs';
 import { el, geojsonLayerRef, markerLayerRef, photoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
 import { resetLabelQueue, watchRankingRowsForLabelFetch } from './labels.mjs';
 import { getVisiblePhotos, openPhotoLightbox, photosForPlace, resolvePlaceName } from './photos.mjs';
@@ -369,7 +369,7 @@ export function renderPrefectureDetail(derived, code) {
         .map((r) => {
           const nameHtml =
             r.clusterId != null && !state.privacy
-              ? `<span class="detail-name" data-cluster-id="${r.clusterId}" data-muni-name="${r.muniName}">${formatPlaceLabel(r.muniName, state.placeLabelCache.get(r.clusterId))}</span>`
+              ? `<span class="detail-name" data-cluster-id="${r.clusterId}" data-muni-name="${escapeHtml(r.muniName)}">${escapeHtml(formatPlaceLabel(r.muniName, state.placeLabelCache.get(r.clusterId)))}</span>`
               : r.muniName;
           return `<div class="place-item" data-cluster-id="${r.clusterId ?? ''}" data-muni-code="${r.muniCode ?? ''}"><span class="place-count">${r.count}回</span> — ${nameHtml}</div>`;
         })
@@ -454,7 +454,7 @@ export function renderPlaceDetail(derived, params) {
     parts.push('<h3 style="margin-top:16px;">滞在日一覧</h3><p class="panel-hint">日付をクリックすると、その日の経路マップを表示します。</p>');
     parts.push(
       memberVisits
-        .map((v) => (v.dateStr ? `<div class="place-item day-item" data-date="${v.dateStr}">${v.dateStr}</div>` : '<div class="place-item">-</div>'))
+        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" aria-label="${v.dateStr} の経路を表示">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
         .join('')
     );
 

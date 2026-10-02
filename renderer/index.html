@@ -116,14 +116,27 @@
     </section>
 
     <div id="day-view-overlay" class="day-view-overlay" hidden>
-      <div id="day-view-panel">
+      <div id="day-view-panel" role="dialog" aria-modal="true" aria-labelledby="day-view-title" aria-describedby="day-view-summary">
         <div id="day-view-header">
-          <h2 id="day-view-title"></h2>
-          <button id="btn-day-view-close" class="btn">閉じる</button>
+          <div class="day-view-nav">
+            <button id="btn-day-view-prev" class="btn btn-icon" aria-label="前の記録日（←キー）" title="前の記録日（←）">&#8249;</button>
+            <h2 id="day-view-title" tabindex="-1"></h2>
+            <button id="btn-day-view-next" class="btn btn-icon" aria-label="次の記録日（→キー）" title="次の記録日（→）">&#8250;</button>
+          </div>
+          <p id="day-view-summary" class="day-view-summary"></p>
+          <button id="btn-day-view-close" class="btn" aria-label="閉じる（Escキー）" title="閉じる（Esc）">閉じる</button>
         </div>
-        <div id="day-view-map"></div>
-        <div id="day-view-message" class="route-message" hidden></div>
-        <div id="day-view-legend" class="badge route-legend"></div>
+        <div id="day-view-body">
+          <div id="day-view-map-wrap">
+            <div id="day-view-map" role="region" aria-label="この日の経路地図。内容は右のタイムラインと同じです"></div>
+            <div id="day-view-message" class="route-message" role="status" hidden></div>
+            <ul id="day-view-legend" class="badge route-legend day-view-legend" aria-label="凡例"></ul>
+          </div>
+          <section id="day-view-timeline-wrap" aria-labelledby="day-view-timeline-heading">
+            <h3 id="day-view-timeline-heading">タイムライン</h3>
+            <ol id="day-view-timeline" class="day-view-timeline"></ol>
+          </section>
+        </div>
       </div>
     </div>
 

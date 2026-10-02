@@ -1,12 +1,13 @@
 // 経路マップ tab and the per-day route modal (滞在日 -> その日の経路).
 
 import { clearMarkers } from './mapView.mjs';
-import { initRouteMap, renderRoute, clearRoute, colorForMode } from './routeView.mjs';
+import { initRouteMap, renderRoute, clearRoute, colorForMode, renderDayRoute, lineSampleSvg, formatClock } from './routeView.mjs';
 import { renderPhotoLayer, clearPhotoLayer } from './photoView.mjs';
-import { modeLabel } from './statsView.mjs';
-import { applyPrivacy, applyExclusionZones, municipalityName } from './aggregate.mjs';
+import { modeLabel, formatDuration } from './statsView.mjs';
+import { applyPrivacy, applyExclusionZones, municipalityName, computeModalVisitLocation, dwellMs, escapeHtml } from './aggregate.mjs';
 import { dayViewLayerRef, dayViewMarkerLayerRef, el, routeLayerRef, routePhotoLayerRef, state, ui } from './context.mjs';
 import { getVisiblePhotos, openPhotoLightbox, resolvePlaceName } from './photos.mjs';
+import { enqueueLabelFetch, onPlaceLabelUpdated } from './labels.mjs';
 import { getDerived } from './app.mjs';
 
 // Which transport modes are currently toggled off in the route map legend —
@@ -82,74 +83,358 @@ export function renderRouteTab(derived) {
 }
 
 // ---------- Day view (滞在日 -> その日の経路マップ) ----------
-// A lightweight modal, independent of the main map/route-tab state machine
-// (so opening/closing it never disturbs the caller's navigation/history) —
-// just a narrow-to-one-day rendering of the same pathSegments the route tab
-// uses, via the same routeView.mjs helpers.
+// A modal dialog, independent of the main map/route-tab state machine (so
+// opening/closing it never disturbs the caller's navigation/history). Shows
+// one day as both a map and an equivalent text timeline (stays and moves in
+// order) — the timeline is the accessible "table view" of the map: every
+// stay/move on the map is also listed there in text, and hovering/focusing a
+// row highlights it on the map.
 
-export function openDayView(dateStr) {
-  if (!state.raw) return;
-  el.dayViewOverlay.hidden = false;
-  el.dayViewTitle.textContent = `${dateStr} の経路`;
+const STOP_FILL = '#ff7f0e'; // same orange as the main map's stay pins
+const STOP_TEXT = '#1a1a1a'; // dark digits on orange: ~8:1 (white would be ~2.9:1)
 
-  if (!ui.dayViewMap) {
-    ui.dayViewMap = initRouteMap(el.dayViewMapDiv);
-  }
-  // The map container was `hidden` until the line above, so Leaflet hasn't
-  // been able to measure it yet.
-  requestAnimationFrame(() => ui.dayViewMap.invalidateSize());
+let dayView = null; // { dateStr, dates, segments, segLayers, stopMarkers, items, opener }
+let unsubscribeLabels = null;
 
+function formatKm(meters) {
+  return (meters / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 1 }) + ' km';
+}
+
+function formatDateTitle(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dow = '日月火水木金土'[d.getDay()];
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${dow}）`;
+}
+
+function dayDisplayData() {
   // Same privacy/exclusion-zone treatment as every other view. In practice
-  // this is only ever reachable via the non-privacy branch of
-  // renderPlaceDetail already, but applying both here too keeps this
-  // function correct on its own rather than relying on that caller detail.
-  const privacyData = applyPrivacy(state.raw, state.privacy);
-  const displayData = applyExclusionZones(privacyData, state.zones);
+  // this is only reachable via the non-privacy branch of renderPlaceDetail,
+  // but applying both here keeps this module correct on its own.
+  return applyExclusionZones(applyPrivacy(state.raw, state.privacy), state.zones);
+}
 
+// Every date that has something to show, for 前/次の記録日 navigation.
+function datesWithData(displayData) {
+  const dates = new Set();
+  for (const s of displayData.pathSegments || []) if (s.dateStr) dates.add(s.dateStr);
+  if (!state.privacy) for (const v of displayData.visits || []) if (v.dateStr) dates.add(v.dateStr);
+  return [...dates].sort();
+}
+
+function placeNameFor(visit) {
+  const muni = municipalityName(state.municipalityByCode, visit.muniCode);
+  const entry = visit.clusterId != null ? state.placeLabelCache.get(visit.clusterId) : null;
+  return entry && entry.status === 'done' && entry.label ? `${entry.label}（${muni}）` : muni;
+}
+
+// Queue detail-name lookups (same queue/cache as the prefecture ranking) for
+// this day's stays; rows update in place via onPlaceLabelUpdated.
+function requestPlaceLabels(visits, displayData) {
+  if (state.privacy) return;
+  for (const v of visits) {
+    if (v.clusterId == null || state.placeLabelCache.has(v.clusterId)) continue;
+    const members = displayData.visits.filter((x) => x.clusterId === v.clusterId);
+    const modal = computeModalVisitLocation(members);
+    if (modal) enqueueLabelFetch(v.clusterId, modal, true);
+  }
+}
+
+// Stays and moves merged into one chronological list. Moves come from
+// `activities` (mode, distance, times — deliberately *no* start/end place
+// names: activities aren't exclusion-zone filtered, see applyExclusionZones),
+// each linked to the drawn route segments overlapping its time span.
+function buildTimeline(dateStr, displayData, segments) {
+  const visits = state.privacy
+    ? []
+    : (displayData.visits || []).filter((v) => v.dateStr === dateStr).sort((a, b) => a.startEpoch - b.startEpoch);
+  const moves = (displayData.activities || []).filter((a) => a.dateStr === dateStr && a.startEpoch != null);
+  const items = [];
+  visits.forEach((v, i) => items.push({ kind: 'stay', epoch: v.startEpoch, visit: v, number: i + 1 }));
+  for (const a of moves) {
+    const segIdx = [];
+    segments.forEach((s, i) => {
+      if (s.startEpoch != null && s.endEpoch != null && a.endEpoch != null && s.startEpoch < a.endEpoch && s.endEpoch > a.startEpoch) segIdx.push(i);
+    });
+    items.push({ kind: 'move', epoch: a.startEpoch, activity: a, segIdx });
+  }
+  items.sort((x, y) => x.epoch - y.epoch);
+  return { items, visits, moves };
+}
+
+function stopIcon(number, active = false) {
+  return L.divIcon({
+    className: 'day-stop-icon',
+    html: `<span class="day-stop${active ? ' active' : ''}" style="background:${STOP_FILL};color:${STOP_TEXT}">${number}</span>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+}
+
+function renderLegend(segments, moves) {
+  const distanceByMode = new Map();
+  for (const a of moves) distanceByMode.set(a.mode, (distanceByMode.get(a.mode) || 0) + (a.distanceMeters || 0));
+  const modes = [...new Set([...segments.map((s) => s.mode), ...moves.map((a) => a.mode)])];
+  const items = modes.map((m) => {
+    const dist = distanceByMode.get(m);
+    return `<li class="legend-item">${lineSampleSvg(m)}<span>${escapeHtml(modeLabel(m))}${dist ? ` <span class="legend-sub">${formatKm(dist)}</span>` : ''}</span></li>`;
+  });
+  if (segments.some((s) => s.inferred)) {
+    items.push(`<li class="legend-item">${lineSampleSvg('UNKNOWN', { inferred: true })}<span>推定区間（詳細な経路データなし）</span></li>`);
+  }
+  if (dayView.stopMarkers.length > 0) {
+    items.push(
+      `<li class="legend-item"><span class="day-stop legend-stop" style="background:${STOP_FILL};color:${STOP_TEXT}" aria-hidden="true">1</span><span>滞在地点（数字は訪問順）</span></li>`
+    );
+  }
+  el.dayViewLegend.innerHTML = items.join('');
+}
+
+function renderTimelineList() {
+  const { items } = dayView;
+  if (items.length === 0) {
+    el.dayViewTimeline.innerHTML = '<li class="empty-note">この日の記録はありません。</li>';
+    return;
+  }
+  el.dayViewTimeline.innerHTML = items
+    .map((item, i) => {
+      if (item.kind === 'stay') {
+        const v = item.visit;
+        return (
+          `<li><button type="button" class="day-tl-item day-tl-stay" data-index="${i}">` +
+          `<span class="day-stop" style="background:${STOP_FILL};color:${STOP_TEXT}" aria-hidden="true">${item.number}</span>` +
+          `<span class="day-tl-body"><span class="day-tl-time">${formatClock(v.startEpoch)}–${formatClock(v.endEpoch)}</span>` +
+          `<span class="day-tl-title" data-cluster-id="${v.clusterId ?? ''}">${escapeHtml(placeNameFor(v))}</span>` +
+          `<span class="day-tl-sub">滞在 ${formatDuration(dwellMs(v))}</span>` +
+          `<span class="visually-hidden">（地図上の${item.number}番の地点）</span></span>` +
+          `</button></li>`
+        );
+      }
+      const a = item.activity;
+      const dur = a.endEpoch != null ? a.endEpoch - a.startEpoch : 0;
+      return (
+        `<li><button type="button" class="day-tl-item day-tl-move" data-index="${i}">` +
+        `<span class="day-tl-line">${lineSampleSvg(a.mode)}</span>` +
+        `<span class="day-tl-body"><span class="day-tl-time">${formatClock(a.startEpoch)}–${formatClock(a.endEpoch)}</span>` +
+        `<span class="day-tl-title">${escapeHtml(modeLabel(a.mode))}で移動</span>` +
+        `<span class="day-tl-sub">${a.distanceMeters ? formatKm(a.distanceMeters) + '・' : ''}${formatDuration(dur)}</span></span>` +
+        `</button></li>`
+      );
+    })
+    .join('');
+
+  el.dayViewTimeline.querySelectorAll('.day-tl-item').forEach((btn) => {
+    const item = items[Number(btn.dataset.index)];
+    btn.addEventListener('mouseenter', () => highlightItem(item, true));
+    btn.addEventListener('mouseleave', () => highlightItem(item, false));
+    btn.addEventListener('focus', () => highlightItem(item, true));
+    btn.addEventListener('blur', () => highlightItem(item, false));
+    btn.addEventListener('click', () => focusItemOnMap(item));
+  });
+}
+
+// Highlight = the stop's badge gets a dark ring / the move's casing turns
+// dark and its line thickens, so it stands out by shape and contrast, not by
+// a new color.
+function highlightItem(item, on) {
+  if (!dayView) return;
+  if (item.kind === 'stay') {
+    const marker = dayView.stopMarkers[item.number - 1];
+    if (!marker) return;
+    marker.setIcon(stopIcon(item.number, on));
+    marker.setZIndexOffset(on ? 1000 : 0);
+    return;
+  }
+  for (const idx of item.segIdx) {
+    const layers = dayView.segLayers[idx] || [];
+    const [casing, main] = layers;
+    if (casing) casing.setStyle({ color: on ? '#101216' : '#ffffff' });
+    if (main) main.setStyle({ weight: main.options.baseWeight + (on ? 3 : 0) });
+    if (on) layers.forEach((l) => l.bringToFront());
+  }
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function focusItemOnMap(item) {
+  const animate = !prefersReducedMotion();
+  if (item.kind === 'stay') {
+    const v = item.visit;
+    ui.dayViewMap.setView([v.lat, v.lng], Math.max(ui.dayViewMap.getZoom(), 15), { animate });
+    const marker = dayView.stopMarkers[item.number - 1];
+    if (marker) marker.openTooltip();
+    return;
+  }
+  const pts = item.segIdx.flatMap((i) => dayView.segments[i].points || []);
+  const a = item.activity;
+  if (pts.length === 0 && a.startLat != null && a.endLat != null) pts.push([a.startLat, a.startLng], [a.endLat, a.endLng]);
+  if (pts.length > 0) ui.dayViewMap.fitBounds(L.latLngBounds(pts), { padding: [40, 40], animate });
+}
+
+function renderSummary({ moves, visits }) {
+  const totalDist = moves.reduce((s, a) => s + (a.distanceMeters || 0), 0);
+  const moveMs = moves.reduce((s, a) => s + (a.endEpoch != null ? Math.max(0, a.endEpoch - a.startEpoch) : 0), 0);
+  const parts = [];
+  if (moves.length) parts.push(`移動 ${formatKm(totalDist)}`, `移動時間 ${formatDuration(moveMs)}`);
+  if (visits.length) parts.push(`滞在 ${visits.length}か所`);
+  el.dayViewSummary.textContent = parts.join(' ・ ');
+}
+
+function renderDay(dateStr) {
+  const displayData = dayDisplayData();
+  const dates = datesWithData(displayData);
   const segments = (displayData.pathSegments || []).filter((s) => s.dateStr === dateStr);
-  const visits = state.privacy ? [] : (displayData.visits || []).filter((v) => v.dateStr === dateStr);
+  const timeline = buildTimeline(dateStr, displayData, segments);
+  dayView = { ...dayView, dateStr, dates, segments, segLayers: [], stopMarkers: [], items: timeline.items };
 
-  if (segments.length === 0 && visits.length === 0) {
+  el.dayViewTitle.textContent = `${formatDateTitle(dateStr)}の経路`;
+  const i = dates.indexOf(dateStr);
+  el.btnDayViewPrev.disabled = i <= 0;
+  el.btnDayViewNext.disabled = i === -1 || i >= dates.length - 1;
+  renderSummary(timeline);
+
+  clearRoute(ui.dayViewMap, dayViewLayerRef);
+  clearMarkers(dayViewMarkerLayerRef);
+
+  if (segments.length === 0 && timeline.visits.length === 0) {
     el.dayViewMessage.hidden = false;
     el.dayViewMessage.textContent = 'この日の詳細な経路データはありません。';
-    clearRoute(ui.dayViewMap, dayViewLayerRef);
-    clearMarkers(dayViewMarkerLayerRef);
     el.dayViewLegend.innerHTML = '';
+    renderTimelineList();
     return;
   }
   el.dayViewMessage.hidden = true;
 
-  renderRoute(ui.dayViewMap, dayViewLayerRef, segments);
+  dayView.segLayers = renderDayRoute(ui.dayViewMap, dayViewLayerRef, segments, { labelFor: modeLabel });
 
-  // Visit markers for context (where the day's stays were), matching the
-  // main map's orange stay-pin styling.
   if (!dayViewMarkerLayerRef.layer) dayViewMarkerLayerRef.layer = L.layerGroup().addTo(ui.dayViewMap);
-  dayViewMarkerLayerRef.layer.clearLayers();
-  for (const v of visits) {
-    const marker = L.circleMarker([v.lat, v.lng], { radius: 7, color: '#ffffff', weight: 2, fillColor: '#ff7f0e', fillOpacity: 0.9 });
-    marker.bindTooltip(municipalityName(state.municipalityByCode, v.muniCode));
+  timeline.visits.forEach((v, idx) => {
+    const n = idx + 1;
+    const marker = L.marker([v.lat, v.lng], {
+      icon: stopIcon(n),
+      keyboard: false, // reachable via the timeline list instead (same content, in order)
+      title: `${n}. ${placeNameFor(v)}`,
+      riseOnHover: true,
+    });
+    marker.bindTooltip(
+      () => `${n}. ${escapeHtml(placeNameFor(v))}<br>${formatClock(v.startEpoch)}–${formatClock(v.endEpoch)}（滞在 ${formatDuration(dwellMs(v))}）`,
+      { direction: 'top', offset: [0, -12] }
+    );
+    marker.on('click', () => {
+      const index = dayView.items.findIndex((it) => it.kind === 'stay' && it.number === n);
+      const btn = el.dayViewTimeline.querySelector(`.day-tl-item[data-index="${index}"]`);
+      if (btn) {
+        btn.scrollIntoView({ block: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        btn.focus({ preventScroll: true });
+      }
+    });
     marker.addTo(dayViewMarkerLayerRef.layer);
-  }
+    dayView.stopMarkers.push(marker);
+  });
 
-  const modesUsed = [...new Set(segments.map((s) => s.mode))];
-  const legendItems = modesUsed.map(
-    (m) => `<span class="legend-item"><span class="legend-swatch" style="background:${colorForMode(m)}"></span>${modeLabel(m)}</span>`
-  );
-  if (segments.some((s) => s.inferred)) {
-    legendItems.push('<span class="legend-item legend-item-inferred">┄ 推定区間（詳細な経路データなし）</span>');
-  }
-  el.dayViewLegend.innerHTML = legendItems.join('');
+  renderLegend(segments, timeline.moves);
+  renderTimelineList();
+  requestPlaceLabels(timeline.visits, displayData);
 
-  const allPoints = [...segments.flatMap((s) => s.points || []), ...visits.map((v) => [v.lat, v.lng])];
-  if (allPoints.length > 0) {
-    ui.dayViewMap.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30] });
-  }
+  const allPoints = [...segments.flatMap((s) => s.points || []), ...timeline.visits.map((v) => [v.lat, v.lng])];
+  if (allPoints.length > 0) ui.dayViewMap.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30], animate: false });
+}
+
+function refreshPlaceName(clusterId) {
+  if (!dayView || el.dayViewOverlay.hidden) return;
+  const item = dayView.items.find((it) => it.kind === 'stay' && it.visit.clusterId === clusterId);
+  if (!item) return;
+  const name = placeNameFor(item.visit);
+  el.dayViewTimeline.querySelectorAll(`.day-tl-title[data-cluster-id="${clusterId}"]`).forEach((t) => {
+    t.textContent = name;
+  });
+  dayView.items.forEach((it) => {
+    if (it.kind !== 'stay' || it.visit.clusterId !== clusterId) return;
+    const marker = dayView.stopMarkers[it.number - 1];
+    const node = marker && marker.getElement();
+    if (node) node.setAttribute('title', `${it.number}. ${name}`);
+  });
+}
+
+export function openDayView(dateStr) {
+  if (!state.raw) return;
+  const opener = document.activeElement;
+  el.dayViewOverlay.hidden = false;
+  if (!ui.dayViewMap) ui.dayViewMap = initRouteMap(el.dayViewMapDiv);
+  // The map container was `hidden` until just now, so Leaflet hasn't been
+  // able to measure it yet — measure before fitting bounds.
+  ui.dayViewMap.invalidateSize();
+  dayView = { opener };
+  renderDay(dateStr);
+  if (!unsubscribeLabels) unsubscribeLabels = onPlaceLabelUpdated(refreshPlaceName);
+  el.btnDayViewClose.focus();
+}
+
+function stepDay(delta) {
+  if (!dayView) return;
+  const i = dayView.dates.indexOf(dayView.dateStr);
+  const next = dayView.dates[i + delta];
+  if (!next) return;
+  renderDay(next);
+  // Keep focus inside the dialog, on the (newly announced) date heading.
+  el.dayViewTitle.focus();
 }
 
 export function closeDayView() {
+  if (el.dayViewOverlay.hidden) return;
   el.dayViewOverlay.hidden = true;
+  const opener = dayView && dayView.opener;
+  dayView = null;
+  if (opener && document.contains(opener)) opener.focus();
+}
+
+function focusableIn(container) {
+  return [...container.querySelectorAll('button, [href], input, select, [tabindex]:not([tabindex="-1"])')].filter(
+    (n) => !n.disabled && n.offsetParent !== null
+  );
 }
 
 export function wireRouteTab() {
   el.btnDayViewClose.addEventListener('click', closeDayView);
+  el.btnDayViewPrev.addEventListener('click', () => stepDay(-1));
+  el.btnDayViewNext.addEventListener('click', () => stepDay(1));
+  // A click on the dimmed backdrop (outside the dialog) closes it.
+  el.dayViewOverlay.addEventListener('click', (e) => {
+    if (e.target === el.dayViewOverlay) closeDayView();
+  });
+  el.dayViewOverlay.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeDayView();
+    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !el.dayViewMapDiv.contains(e.target)) {
+      // Arrow keys with focus inside the map still pan it (Leaflet keyboard nav).
+      e.preventDefault();
+      stepDay(e.key === 'ArrowLeft' ? -1 : 1);
+    } else if (e.key === 'Tab') {
+      // Keep keyboard focus inside the modal dialog.
+      const nodes = focusableIn(el.dayViewPanel);
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
+}
+
+export function getDayViewState() {
+  if (!dayView || el.dayViewOverlay.hidden) return null;
+  return {
+    dateStr: dayView.dateStr,
+    dates: dayView.dates,
+    items: dayView.items.map((it) => it.kind),
+    stops: dayView.stopMarkers.length,
+    segments: dayView.segments.length,
+  };
 }

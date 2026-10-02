@@ -1,7 +1,7 @@
 // Leaflet-based map rendering: national heatmap choropleth (prefecture or
 // municipality granularity) + prefecture drill-down.
 
-import { formatPlaceLabel, isPassOnly } from './aggregate.mjs';
+import { formatPlaceLabel, escapeHtml, isPassOnly } from './aggregate.mjs';
 
 // Single-hue sequential blue for the choropleth (visit-count intensity), kept
 // deliberately far in hue from the orange pins/markers below so pins never
@@ -377,7 +377,7 @@ export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labe
       pane: 'clusterMarkerPane',
     });
     const labelEntry = labelCache && row.clusterId != null ? labelCache.get(row.clusterId) : null;
-    const nameLabel = row.muniName ? formatPlaceLabel(row.muniName, labelEntry) : '';
+    const nameLabel = row.muniName ? escapeHtml(formatPlaceLabel(row.muniName, labelEntry)) : '';
     marker.bindTooltip(`${nameLabel ? nameLabel + ' — ' : ''}滞在 ${row.count} 回`);
     marker.on('click', () => onClickRow(row));
     marker.addTo(markerLayerRef.layer);

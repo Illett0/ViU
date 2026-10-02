@@ -6,6 +6,7 @@ import { recluster } from './loading.mjs';
 import { togglePhotoLayer } from './photos.mjs';
 import { resetTimelapse, startTimelapse, stopTimelapse } from './timelapse.mjs';
 import { closeSettings, openSettings, persistZones } from './settings.mjs';
+import { openDayView, getDayViewState } from './routeTab.mjs';
 import { getDerived, render, setGranularity, setPrivacy } from './app.mjs';
 
 export function installTestHooks() {
@@ -141,5 +142,7 @@ export function installTestHooks() {
       });
     },
     togglePhotoLayer,
+    openDayView,
+    getDayViewState,
   };
 }

@@ -302,6 +302,14 @@ function municipalityName(municipalityByCode, code) {
 // `cacheEntry` is whatever the caller's label cache holds for this cluster:
 // null/undefined (not requested yet), { status: 'pending' }, or
 // { status: 'done'|'error', label: string|null }.
+// Detail names come from OpenStreetMap (Nominatim/Overpass) — external data —
+// so anything built from them must be escaped before it reaches innerHTML or
+// a Leaflet tooltip (which also renders HTML). formatPlaceLabel returns plain
+// text; escape at the HTML sink.
+function escapeHtml(text) {
+  return String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
 function formatPlaceLabel(muniName, cacheEntry) {
   if (!cacheEntry || cacheEntry.status === 'pending') return `${muniName}（取得中…）`;
   if (cacheEntry.status === 'done' && cacheEntry.label) return `${cacheEntry.label}（${muniName}）`;
@@ -689,6 +697,7 @@ export {
   computeModalVisitLocation,
   municipalityName,
   formatPlaceLabel,
+  escapeHtml,
   dwellMs,
   computeDwellCapNote,
   computeClusterRanking,
