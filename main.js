@@ -285,8 +285,21 @@ ipcMain.handle('app:set-privacy-mode', async (event, enabled) => {
   privacyModeEnabled = enabled !== false;
 });
 
+// Test-only escape hatch (issue #26): PATHBROWSER_TEST_GEOCODE_STUB=<delay ms>
+// answers detail-name requests locally with a deterministic fake label after
+// that delay, so E2E runs never hit the real Nominatim/Overpass services and
+// can observe the renderer's fetch queue at a controlled pace. E2E reads and
+// adjusts it from the main process via app.evaluate (globalThis.__viuGeocodeStub).
+const geocodeStub = process.env.PATHBROWSER_TEST_GEOCODE_STUB != null ? { delayMs: Number(process.env.PATHBROWSER_TEST_GEOCODE_STUB) || 0, calls: [] } : null;
+if (geocodeStub) globalThis.__viuGeocodeStub = geocodeStub;
+
 ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) => {
   if (privacyModeEnabled) return { label: null, error: 'privacy-mode', fromCache: false };
+  if (geocodeStub) {
+    geocodeStub.calls.push({ placeId, lat, lng });
+    await new Promise((resolve) => setTimeout(resolve, geocodeStub.delayMs));
+    return { label: `stub ${lat.toFixed(4)},${lng.toFixed(4)}`, error: null, fromCache: false };
+  }
   return nominatim.reverseGeocode(app.getPath('userData'), { placeId, lat, lng });
 });
 

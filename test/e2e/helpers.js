@@ -123,6 +123,9 @@ async function launchApp(extraEnv = {}) {
       // The suite's assertions read the Japanese UI; pin it regardless of the
       // machine's OS language (a spec can override this via extraEnv).
       PATHBROWSER_TEST_LANG: 'ja',
+      // Detail names come from a local stub, never the real Nominatim/Overpass
+      // (see main.js). A spec can raise the delay via extraEnv or app.evaluate.
+      PATHBROWSER_TEST_GEOCODE_STUB: '0',
       ...extraEnv,
     },
   });
