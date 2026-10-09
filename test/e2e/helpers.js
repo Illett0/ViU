@@ -135,7 +135,9 @@ async function launchApp(extraEnv = {}) {
   }
   page.on('console', (msg) => diag.logs.push(`[renderer ${msg.type()}] ${msg.text()}`));
   page.on('pageerror', (err) => diag.logs.push('[renderer pageerror] ' + (err.stack || err)));
-  await page.waitForSelector('#btn-open-file-main', { state: 'visible', timeout: 30000 });
+  // data-ready is set once the renderer has translated and wired the page —
+  // the static buttons exist (and look clickable) before that.
+  await page.waitForSelector('html[data-ready] #btn-open-file-main', { state: 'visible', timeout: 30000 });
 
   // Nice-to-have (issue #25): keep the real Electron window from visibly
   // popping up on screen during the run. Best-effort — not fatal if it

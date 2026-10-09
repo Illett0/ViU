@@ -327,5 +327,9 @@ wireRouteTab();
 wireTimelapse();
 wireSettings();
 installTestHooks();
+// Static markup is visible (and clickable) before this module graph has run;
+// style.css keeps #app hidden until here so nobody sees the untranslated page
+// or clicks a button that isn't wired yet. E2E waits on this too.
+document.documentElement.dataset.ready = '1';
 refreshRecentFilesList();
 initPhotoLink();
