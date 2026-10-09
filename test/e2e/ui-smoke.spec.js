@@ -10,7 +10,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { CLUSTER_A, TOKYO_CODE, near, settle, createStepRunner, launchApp, completeOnboarding, goToPlace } = require('./helpers');
+const { CLUSTER_A, TOKYO_CODE, near, settle, createStepRunner, assertHeaderOneRow, launchApp, completeOnboarding, goToPlace } = require('./helpers');
 
 async function main() {
   const { step, stepNames } = createStepRunner();
@@ -25,8 +25,7 @@ async function main() {
     await completeOnboarding(page, step);
 
     await step('layout: the header fits on one row at the default window size', async () => {
-      const tops = await page.evaluate(() => ['.header-left', '#address-bar', '.header-right'].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().top)));
-      assert(Math.max(...tops) - Math.min(...tops) < 10, `header wrapped onto two rows (tops: ${tops})`);
+      await assertHeaderOneRow(page, 'header wrapped onto two rows');
     });
 
     await step('layout: no window-level scrollbars, zoom buttons clear of the map badges', async () => {

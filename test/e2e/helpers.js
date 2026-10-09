@@ -92,6 +92,24 @@ async function dumpDiagnostics() {
   console.error('--- app/console log (last 60 lines) ---\n' + diag.logs.slice(-60).join('\n'));
 }
 
+// The header must fit on one row at the app's default window size (main.js
+// creates it 1280px wide). A smaller screen — e.g. CI's macOS runner — shrinks
+// the window, and wrapping onto two rows there is the intended narrow-window
+// layout, so the check only applies when the window actually got its width.
+const DEFAULT_CONTENT_WIDTH = 1240;
+
+async function assertHeaderOneRow(page, message) {
+  const m = await page.evaluate(() => ({
+    width: window.innerWidth,
+    tops: ['.header-left', '#address-bar', '.header-right'].map((q) => Math.round(document.querySelector(q).getBoundingClientRect().top)),
+  }));
+  if (m.width < DEFAULT_CONTENT_WIDTH) {
+    console.log(`  (window is only ${m.width}px wide on this machine; skipping the one-row header check)`);
+    return;
+  }
+  assert(Math.max(...m.tops) - Math.min(...m.tops) < 10, `${message} (window ${m.width}px, tops: ${m.tops})`);
+}
+
 function createStepRunner() {
   const stepNames = [];
   async function step(name, fn) {
@@ -210,6 +228,7 @@ module.exports = {
   latLngToPoint,
   getView,
   createStepRunner,
+  assertHeaderOneRow,
   launchApp,
   completeOnboarding,
 };

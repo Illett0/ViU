@@ -10,7 +10,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { TOKYO_CODE, settle, createStepRunner, launchApp, completeOnboarding, goToPrefecture } = require('./helpers');
+const { TOKYO_CODE, settle, createStepRunner, assertHeaderOneRow, launchApp, completeOnboarding, goToPrefecture } = require('./helpers');
 
 // Any CJK left after removing municipality names and OpenStreetMap detail
 // names (both stay Japanese by design) is an untranslated string.
@@ -64,8 +64,7 @@ async function main() {
       assert(/\/ 47 prefectures/.test(await page.textContent('#prefecture-count-badge')));
       await goToPrefecture(page, TOKYO_CODE);
       assert((await page.textContent('#breadcrumb')).includes('Tokyo'));
-      const tops = await page.evaluate(() => ['.header-left', '#address-bar', '.header-right'].map((q) => Math.round(document.querySelector(q).getBoundingClientRect().top)));
-      assert(Math.max(...tops) - Math.min(...tops) < 10, `the longer English labels must not wrap the header (tops: ${tops})`);
+      await assertHeaderOneRow(page, 'the longer English labels must not wrap the header');
       const panel = await page.textContent('#detail-panel-content');
       assert(panel.includes('Tokyo') && panel.includes('First visit'), panel);
       assert.deepStrictEqual(await visibleJapanese(page), []);
