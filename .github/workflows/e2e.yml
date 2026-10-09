@@ -1,0 +1,75 @@
+# E2E on Windows and macOS (issue #31), plus an unsigned macOS package so the
+# Mac build (issue #16) gets exercised without Mac hardware. Uses only the
+# synthetic fixtures under test/e2e/fixtures — never real location data.
+name: E2E
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Day-view clock times are formatted in the host's local time; run in
+      # the timezone the app's users are actually in.
+      - name: Use Japan time (Windows)
+        if: runner.os == 'Windows'
+        run: tzutil /s "Tokyo Standard Time"
+      - name: Use Japan time (macOS)
+        if: runner.os == 'macOS'
+        run: sudo systemsetup -settimezone Asia/Tokyo
+
+      # .npmrc sets ignore-scripts=true; the Electron binary is fetched lazily
+      # on first launch, so no install scripts are needed for the tests.
+      - run: npm ci
+
+      - run: npm run test:e2e
+
+  package-mac:
+    name: Package (macOS, unsigned)
+    needs: e2e
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build .dmg (arm64 + x64)
+        run: npx electron-builder --mac dmg --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ViU-mac-unsigned
+          path: dist/*.dmg
+          retention-days: 14
