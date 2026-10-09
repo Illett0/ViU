@@ -64,6 +64,8 @@ async function main() {
       assert(/\/ 47 prefectures/.test(await page.textContent('#prefecture-count-badge')));
       await goToPrefecture(page, TOKYO_CODE);
       assert((await page.textContent('#breadcrumb')).includes('Tokyo'));
+      const tops = await page.evaluate(() => ['.header-left', '#address-bar', '.header-right'].map((q) => Math.round(document.querySelector(q).getBoundingClientRect().top)));
+      assert(Math.max(...tops) - Math.min(...tops) < 10, `the longer English labels must not wrap the header (tops: ${tops})`);
       const panel = await page.textContent('#detail-panel-content');
       assert(panel.includes('Tokyo') && panel.includes('First visit'), panel);
       assert.deepStrictEqual(await visibleJapanese(page), []);
@@ -104,13 +106,19 @@ async function main() {
       await page.evaluate(() => window.__pathBrowserTest.stopTimelapse());
     });
 
-    await step('the history menu and bookmark panel are in English', async () => {
+    await step('the history menu, bookmark panel and address bar are in English', async () => {
       await page.click('#btn-history');
       await page.waitForSelector('#history-menu:not([hidden])');
       assert.deepStrictEqual(await visibleJapanese(page), []);
       await page.keyboard.press('Escape');
       await page.click('#btn-bookmarks');
       await page.waitForSelector('#bookmark-panel:not([hidden])');
+      assert.deepStrictEqual(await visibleJapanese(page), []);
+      await page.keyboard.press('Escape');
+      await page.click('#btn-search');
+      await page.fill('#address-input', 'to');
+      await page.waitForSelector('#address-results:not([hidden])');
+      assert((await page.textContent('#address-results')).includes('Tokyo'));
       assert.deepStrictEqual(await visibleJapanese(page), []);
       await page.keyboard.press('Escape');
     });

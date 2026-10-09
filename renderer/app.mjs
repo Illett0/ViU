@@ -18,6 +18,7 @@ import { renderSettingsScreen, wireSettings } from './settings.mjs';
 import { installTestHooks } from './testHooks.mjs';
 import { updateHistoryButton, wireHistoryMenu } from './historyMenu.mjs';
 import { initBookmarks, updateBookmarkButton, wireBookmarks } from './bookmarks.mjs';
+import { updateAddressBar, wireAddressBar } from './addressBar.mjs';
 import { applyStaticTranslations, setLanguage, tr } from './i18n.mjs';
 
 export function getDerived() {
@@ -54,6 +55,7 @@ export function render() {
   el.btnForward.disabled = !canGoForward(state);
   updateHistoryButton();
   updateBookmarkButton();
+  updateAddressBar();
 
   el.tabRoute.disabled = state.privacy;
   if (state.privacy && state.tab === 'route') state.tab = 'map';
@@ -342,6 +344,7 @@ wireTimelapse();
 wireSettings();
 wireHistoryMenu();
 wireBookmarks();
+wireAddressBar();
 installTestHooks();
 // Static markup is visible (and clickable) before this module graph has run;
 // style.css keeps #app hidden until here so nobody sees the untranslated page

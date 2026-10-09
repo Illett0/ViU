@@ -83,6 +83,11 @@ export function localizePrefectureRecords(records) {
   }
 }
 
+// English name of a prefecture regardless of the UI language (search keys).
+export function prefectureNameEn(code) {
+  return PREFECTURE_NAMES_EN[code] || null;
+}
+
 export async function setLanguage(next) {
   lang = (await bridge.setLanguage(next)) === 'en' ? 'en' : 'ja';
   applyStaticTranslations();

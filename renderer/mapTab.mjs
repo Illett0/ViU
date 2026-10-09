@@ -542,7 +542,7 @@ export function renderPlaceDetail(derived, params) {
     parts.push(`<div class="stat-row"><span class="label">${tr('合計滞在時間', 'Total time spent')}</span><span>${row ? formatDuration(row.dwellMs) : '-'}</span></div>`);
     if (row && row.firstEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最初に訪れた日', 'First visit')}</span><span>${localDateStr(row.firstEpoch)}</span></div>`);
     if (row && row.lastEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最後に訪れた日', 'Last visit')}</span><span>${localDateStr(row.lastEpoch)}</span></div>`);
-    parts.push(`<div class="privacy-note">${tr('プライバシー保護モードのため、市区町村単位の情報のみ表示しています。', 'Privacy mode is on, so only municipality-level information is shown.')}</div>`);
+    if (state.privacy) parts.push(`<div class="privacy-note">${tr('プライバシー保護モードのため、市区町村単位の情報のみ表示しています。', 'Privacy mode is on, so only municipality-level information is shown.')}</div>`);
 
     el.detailPanelContent.innerHTML = parts.join('');
     wireBackLink();
@@ -562,7 +562,9 @@ export function renderBreadcrumb() {
     crumbs.push({ label: pref ? pref.name : tr('県', 'Prefecture'), view: 'prefecture', params: { code } });
   }
   if (view.view === 'place') {
-    crumbs.push({ label: tr('滞在地点', 'Stay point'), view: 'place', params: view.params });
+    // A municipality summary (clusterId null) is named after its municipality.
+    const label = view.params.clusterId == null && view.params.muniCode ? municipalityName(state.municipalityByCode, view.params.muniCode) : tr('滞在地点', 'Stay point');
+    crumbs.push({ label, view: 'place', params: view.params });
   }
 
   el.breadcrumb.innerHTML = crumbs

@@ -24,6 +24,11 @@ async function main() {
   try {
     await completeOnboarding(page, step);
 
+    await step('layout: the header fits on one row at the default window size', async () => {
+      const tops = await page.evaluate(() => ['.header-left', '#address-bar', '.header-right'].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().top)));
+      assert(Math.max(...tops) - Math.min(...tops) < 10, `header wrapped onto two rows (tops: ${tops})`);
+    });
+
     await step('layout: no window-level scrollbars, zoom buttons clear of the map badges', async () => {
       const overlaps = (a, b) => a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
       for (const tab of ['map', 'route']) {

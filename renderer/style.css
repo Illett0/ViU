@@ -60,7 +60,9 @@ html, body {
 }
 .header-right { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; margin-left: auto; }
 #app-header .btn, #app-header label { white-space: nowrap; }
-@media (max-width: 1180px) {
+/* 1400px: with the history/bookmark/search buttons the header needs the room
+   at the default 1280px window to stay on one row. */
+@media (max-width: 1400px) {
   .privacy-label-prefix { display: none; }
 }
 
@@ -77,6 +79,37 @@ html, body {
   border-radius: 5px;
   flex-shrink: 0;
 }
+
+/* Address bar (issue #36): the breadcrumb, or the search field in its place. */
+.address-bar {
+  position: relative;
+  /* Basis 0: the search field must take only the breadcrumb's share of the
+     header, never its own intrinsic width (which would wrap the header). */
+  flex: 1 1 0;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#address-input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--color-accent);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+}
+.address-results { left: 0; right: auto; width: 100%; max-width: none; }
+.address-result { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+.address-result.active, .address-result:hover { background: var(--color-panel-alt); }
+.address-kind { flex-shrink: 0; min-width: 64px; font-size: 11px; color: var(--color-text-dim); }
+.address-sub { margin-left: auto; font-size: 12px; color: var(--color-text-dim); }
+.address-empty { padding: 6px 10px; font-size: 13px; color: var(--color-text-dim); }
+.btn-search { min-width: 30px; height: 30px; font-size: 13px; }
 
 #breadcrumb {
   flex: 1;
