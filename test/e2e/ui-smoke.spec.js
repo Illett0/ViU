@@ -127,7 +127,12 @@ async function main() {
       await page.click('#btn-settings');
       await page.waitForSelector('#settings-screen:not([hidden])');
       await settle(page);
-      const box = await (await page.$('#zone-map')).boundingBox();
+      // A raw mouse click only lands inside the viewport — on a small screen
+      // (CI's macOS runner) the zone map starts below the fold.
+      const zoneMap = await page.$('#zone-map');
+      await zoneMap.scrollIntoViewIfNeeded();
+      await settle(page);
+      const box = await zoneMap.boundingBox();
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
       await page.waitForSelector('#zone-pending:not([hidden])');
       await page.click('#btn-zone-confirm');
