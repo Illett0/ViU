@@ -1,7 +1,7 @@
 import { currentView, navigateTo } from './state.mjs';
 import { mainlandBounds } from './mapView.mjs';
 import { computeConquestRates, isPassOnly, computeClusterRanking } from './aggregate.mjs';
-import { el, photoLayerRef, routePhotoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
+import { el, geojsonLayerRef, photoLayerRef, routePhotoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
 import { recluster } from './loading.mjs';
 import { togglePhotoLayer } from './photos.mjs';
 import { resetTimelapse, startTimelapse, stopTimelapse } from './timelapse.mjs';
@@ -101,6 +101,22 @@ export function installTestHooks() {
     },
     getMapZoom() {
       return ui.map ? { zoom: ui.map.getZoom(), center: ui.map.getCenter(), context: ui.lastMapContext } : null;
+    },
+    getMapBounds() {
+      if (!ui.map) return null;
+      const b = ui.map.getBounds();
+      return { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
+    },
+    // The choropleth's per-prefecture Leaflet style options (prefecture
+    // granularity only), keyed by prefecture code.
+    getPrefectureStyles() {
+      const out = {};
+      if (!geojsonLayerRef.layer) return out;
+      geojsonLayerRef.layer.eachLayer((lyr) => {
+        const { color, weight, fillColor, fillOpacity } = lyr.options;
+        out[lyr.feature.properties.code] = { color, weight, fillColor, fillOpacity };
+      });
+      return out;
     },
     getMaxZoom() {
       return ui.map ? ui.map.getMaxZoom() : null;
