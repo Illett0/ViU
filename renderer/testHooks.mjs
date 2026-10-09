@@ -3,6 +3,7 @@ import { mainlandBounds } from './mapView.mjs';
 import { computeConquestRates, isPassOnly, computeClusterRanking } from './aggregate.mjs';
 import { el, geojsonLayerRef, photoLayerRef, routePhotoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
 import { recluster } from './loading.mjs';
+import { getLabelQueueState } from './labels.mjs';
 import { togglePhotoLayer } from './photos.mjs';
 import { resetTimelapse, startTimelapse, stopTimelapse } from './timelapse.mjs';
 import { closeSettings, openSettings, persistZones } from './settings.mjs';

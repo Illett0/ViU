@@ -12,8 +12,8 @@ const fs = require('fs');
 const path = require('path');
 const { TOKYO_CODE, settle, createStepRunner, launchApp, completeOnboarding, goToPrefecture } = require('./helpers');
 
-// Any CJK left after removing municipality names (which stay Japanese by
-// design) is an untranslated string.
+// Any CJK left after removing municipality names and OpenStreetMap detail
+// names (both stay Japanese by design) is an untranslated string.
 const JAPANESE = /[぀-ヿ㐀-鿿！-｠]/;
 
 async function visibleJapanese(page) {
@@ -22,7 +22,9 @@ async function visibleJapanese(page) {
     const t = window.__pathBrowserTest;
     const loaded = !document.getElementById('btn-settings').hidden; // shown once a timeline is loaded
     const munis = loaded ? [...t.getMunicipalityAggregates(), ...t.getPassOnlyMunicipalities()] : [];
-    const muniNames = munis.map((m) => m.name).sort((a, b) => b.length - a.length);
+    // Detail place names fetched from OpenStreetMap are external data too.
+    const placeLabels = loaded ? t.getPlaceLabelCache().entries.map(([, e]) => e && e.label).filter(Boolean) : [];
+    const muniNames = [...munis.map((m) => m.name), ...placeLabels].sort((a, b) => b.length - a.length);
     const strip = (text) => muniNames.reduce((acc, name) => acc.split(name).join(''), text);
     const texts = [
       ...document.body.innerText.split('\n'),
