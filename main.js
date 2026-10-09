@@ -237,10 +237,11 @@ ipcMain.handle('timeline:parse-file', async (event, filePath) => {
     });
 
     worker.on('error', (err) => reject(err));
+    // A non-zero exit without a prior 'done'/'error' message means the worker
+    // crashed; reject so the renderer shows an error instead of waiting
+    // forever on the progress screen. (A no-op if already settled.)
     worker.on('exit', (code) => {
-      if (code !== 0) {
-        // A non-zero exit without a prior 'done'/'error' message means the worker crashed.
-      }
+      if (code !== 0) reject(new Error(`parse worker exited with code ${code}`));
     });
   });
 

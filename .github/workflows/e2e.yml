@@ -38,6 +38,12 @@ jobs:
       - name: Use Japan time (Windows)
         if: runner.os == 'Windows'
         run: tzutil /s "Tokyo Standard Time"
+      # The default runner display is small enough that the 1280x860 window
+      # gets shrunk, which changes which map markers overlap; match a
+      # typical desktop instead.
+      - name: Use a 1920x1080 display (Windows)
+        if: runner.os == 'Windows'
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
       - name: Use Japan time (macOS)
         if: runner.os == 'macOS'
         run: sudo systemsetup -settimezone Asia/Tokyo

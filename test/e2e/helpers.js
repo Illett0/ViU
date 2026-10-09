@@ -75,11 +75,33 @@ async function getView(page) {
   return page.evaluate(() => window.__pathBrowserTest.getView());
 }
 
+// Diagnostics for whichever app launchApp() started last: main-process
+// stdout/stderr and renderer console output, dumped together with the
+// visible page text when a step fails — on CI that's the only way to see
+// *why* a screen never appeared.
+const diag = { page: null, logs: [] };
+
+async function dumpDiagnostics() {
+  if (!diag.page) return;
+  try {
+    const text = await diag.page.evaluate(() => document.body.innerText);
+    console.error('\n--- visible page text ---\n' + text.slice(0, 3000));
+  } catch (err) {
+    console.error('\n(could not read page text: ' + err.message + ')');
+  }
+  console.error('--- app/console log (last 60 lines) ---\n' + diag.logs.slice(-60).join('\n'));
+}
+
 function createStepRunner() {
   const stepNames = [];
   async function step(name, fn) {
     process.stdout.write('- ' + name + ' ... ');
-    await fn();
+    try {
+      await fn();
+    } catch (err) {
+      await dumpDiagnostics();
+      throw err;
+    }
     stepNames.push(name);
     console.log('OK');
   }
@@ -105,6 +127,14 @@ async function launchApp(extraEnv = {}) {
     },
   });
   const page = await app.firstWindow();
+  diag.page = page;
+  diag.logs = [];
+  const proc = app.process();
+  for (const stream of [proc.stdout, proc.stderr]) {
+    if (stream) stream.on('data', (chunk) => diag.logs.push(...String(chunk).trimEnd().split('\n').map((l) => '[main] ' + l)));
+  }
+  page.on('console', (msg) => diag.logs.push(`[renderer ${msg.type()}] ${msg.text()}`));
+  page.on('pageerror', (err) => diag.logs.push('[renderer pageerror] ' + (err.stack || err)));
   await page.waitForSelector('#btn-open-file-main', { state: 'visible', timeout: 30000 });
 
   // Nice-to-have (issue #25): keep the real Electron window from visibly
