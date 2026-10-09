@@ -56,6 +56,7 @@ The app has a privacy feature that lets you register your home and workplace as 
 
 ## Features
 
+- **Browsing the data**: Move through your data the way you would in a web browser. Places, dates and municipalities shown on screen link to their own details (a stay in the day view → that stay point's details, dates in Travel Stats → that day's route, a municipality in the Chronology → the stay point of the first visit), a stay point's details list "Nearby stay points", and the day view links each stay to the previous/next day you were at the same place. The ▾ next to back/forward lists your browsing history so you can jump to any earlier view, and ☆ bookmarks the current view (including period and tab) under a name. Bookmarks remember a stay point by its coordinates, so they still open the same place after changing the cluster distance or opening another file (bookmarks are stored only in this PC's app data folder and are removed by "Delete all data").
 - **Language**: The app UI is available in Japanese and English. On first launch it follows the OS language, and you can switch it in Settings. Municipality names stay in Japanese, while prefecture names are shown in English.
 - **Coverage Map (制覇マップ)**: Draws prefecture boundaries (or municipality boundaries; granularity is switchable) on a map of Japan and shades visited areas by number of visits. Clicking a prefecture shows its stay count, first/last visit dates, total/average stay time, municipality coverage rate and a list of stay points per municipality. When you click a prefecture, the zoom fits **the largest polygon (the mainland part)** rather than a bounding box that includes remote islands such as the Tama area or the Izu Islands, and if you have visited points on remote islands, jump links appear in the detail panel.
 - **Granularity switch**: The Coverage Map switches between "Prefecture / Municipality" with one click. Municipality mode draws about 1,900 municipalities nationwide, but keeps performance up by drawing only those within the visible area. Municipalities you only **passed through** by train, car, etc. without a recorded stay are colored separately from visited ones as "passed through only" (light teal), with a separate count (they are not included in the municipality coverage rate).
@@ -139,6 +140,7 @@ lib/cluster.js               Distance-based clustering (Union-Find)
 lib/geoCache.js               Disk cache of municipality judging and clustering results
 lib/nominatim.js              Nominatim reverse geocoding (rate limiting, caching)
 lib/exclusionZones.js         Exclusion zone persistence (user data folder)
+lib/bookmarks.js              Bookmark persistence (user data folder)
 lib/coords.js                 Utilities for coordinate string parsing and distance calculation
 lib/locate.js                 Unified point → municipality/prefecture judging (nearest municipality outside the coastline)
 lib/photoCache.js             Disk cache of photo scan results, persistence of the linked folder
@@ -165,6 +167,8 @@ renderer/timelapse.mjs        Timelapse playback
 renderer/settings.mjs         Settings screen (exclusion zones, cache/data deletion)
 renderer/testHooks.mjs        Hooks for E2E tests
 renderer/i18n.mjs             UI language (Japanese/English) switching and translation helpers
+renderer/historyMenu.mjs      Browsing history list
+renderer/bookmarks.mjs        Bookmarks
 ```
 
 ## Building the distribution package

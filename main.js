@@ -6,6 +6,7 @@ const fs = require('fs');
 const { Worker } = require('worker_threads');
 const nominatim = require('./lib/nominatim');
 const exclusionZones = require('./lib/exclusionZones');
+const bookmarks = require('./lib/bookmarks');
 const recentFiles = require('./lib/recentFiles');
 const geoCache = require('./lib/geoCache');
 const photoCache = require('./lib/photoCache');
@@ -336,6 +337,7 @@ const USER_DATA_ENTRIES = [
   'timeline-backups',
   'exclusion-zones.json',
   'settings.json',
+  'bookmarks.json',
 ];
 
 ipcMain.handle('data:delete-all', async () => {
@@ -351,8 +353,8 @@ ipcMain.handle('data:delete-all', async () => {
         title: tr('すべてのデータを削除', 'Delete all data'),
         message: tr('ViUが保存したデータをすべて削除しますか？', 'Delete all data saved by ViU?'),
         detail: tr(
-          '最近使ったファイルの履歴とアプリ内バックアップ（タイムラインのコピー）、除外ゾーン、写真フォルダの連携設定、各種キャッシュが削除されます。元のタイムラインファイルや写真そのものは削除されません。この操作は取り消せません。',
-          'This deletes the recent-files history and in-app backups (copies of your timeline), exclusion zones, the linked photo folder setting, and all caches. Your original timeline file and photos are not deleted. This cannot be undone.'
+          '最近使ったファイルの履歴とアプリ内バックアップ（タイムラインのコピー）、除外ゾーン、ブックマーク、写真フォルダの連携設定、各種キャッシュが削除されます。元のタイムラインファイルや写真そのものは削除されません。この操作は取り消せません。',
+          'This deletes the recent-files history and in-app backups (copies of your timeline), exclusion zones, bookmarks, the linked photo folder setting, and all caches. Your original timeline file and photos are not deleted. This cannot be undone.'
         ),
       });
   if (response !== 0) return { deleted: false };
@@ -495,6 +497,10 @@ ipcMain.handle('photos:get-thumbnail', async (event, filePath) => {
     return { unsupported: true };
   }
 });
+
+ipcMain.handle('bookmarks:get', async () => bookmarks.readBookmarks(app.getPath('userData')));
+
+ipcMain.handle('bookmarks:save', async (event, list) => bookmarks.writeBookmarks(app.getPath('userData'), list));
 
 ipcMain.handle('timeline:get-zones', async () => {
   return exclusionZones.readZones(app.getPath('userData'));

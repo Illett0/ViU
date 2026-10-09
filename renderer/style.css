@@ -1297,3 +1297,16 @@ html:not([data-ready]) #app {
 .nearby-list { list-style: none; margin: 4px 0 0; padding: 0; }
 .nearby-list li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--color-border); }
 .nearby-meta { color: var(--color-text-dim); white-space: nowrap; }
+
+/* Bookmarks (issue #35) — reuses the history menu's popover look. */
+.bookmark-nav { position: relative; }
+.bookmark-panel { width: 300px; }
+.bookmark-form { display: flex; gap: 6px; padding: 4px; }
+.bookmark-form input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg); color: var(--color-text); font: inherit; font-size: 13px; }
+.bookmark-form .btn-small { margin-top: 0; }
+.bookmark-list { list-style: none; margin: 4px 0 0; padding: 0; border-top: 1px solid var(--color-border); }
+.bookmark-list li { display: flex; align-items: center; }
+.bookmark-list .empty-note { padding: 8px 10px; }
+.bookmark-delete { background: none; border: none; color: var(--color-text-dim); font-size: 16px; padding: 2px 8px; cursor: pointer; }
+.bookmark-delete:hover, .bookmark-delete:focus-visible { color: var(--color-danger); }
+.btn-icon[aria-expanded="true"]::after { display: none; }

@@ -17,6 +17,7 @@ import { stopTimelapse, wireTimelapse } from './timelapse.mjs';
 import { renderSettingsScreen, wireSettings } from './settings.mjs';
 import { installTestHooks } from './testHooks.mjs';
 import { updateHistoryButton, wireHistoryMenu } from './historyMenu.mjs';
+import { initBookmarks, updateBookmarkButton, wireBookmarks } from './bookmarks.mjs';
 import { applyStaticTranslations, setLanguage, tr } from './i18n.mjs';
 
 export function getDerived() {
@@ -52,6 +53,7 @@ export function render() {
   el.btnBack.disabled = !canGoBack(state);
   el.btnForward.disabled = !canGoForward(state);
   updateHistoryButton();
+  updateBookmarkButton();
 
   el.tabRoute.disabled = state.privacy;
   if (state.privacy && state.tab === 'route') state.tab = 'map';
@@ -339,10 +341,12 @@ wireRouteTab();
 wireTimelapse();
 wireSettings();
 wireHistoryMenu();
+wireBookmarks();
 installTestHooks();
 // Static markup is visible (and clickable) before this module graph has run;
 // style.css keeps #app hidden until here so nobody sees the untranslated page
 // or clicks a button that isn't wired yet. E2E waits on this too.
 document.documentElement.dataset.ready = '1';
 refreshRecentFilesList();
+initBookmarks();
 initPhotoLink();

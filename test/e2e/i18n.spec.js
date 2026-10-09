@@ -104,6 +104,17 @@ async function main() {
       await page.evaluate(() => window.__pathBrowserTest.stopTimelapse());
     });
 
+    await step('the history menu and bookmark panel are in English', async () => {
+      await page.click('#btn-history');
+      await page.waitForSelector('#history-menu:not([hidden])');
+      assert.deepStrictEqual(await visibleJapanese(page), []);
+      await page.keyboard.press('Escape');
+      await page.click('#btn-bookmarks');
+      await page.waitForSelector('#bookmark-panel:not([hidden])');
+      assert.deepStrictEqual(await visibleJapanese(page), []);
+      await page.keyboard.press('Escape');
+    });
+
     await step('the settings screen has no untranslated text', async () => {
       await page.click('#btn-settings');
       await page.waitForSelector('#settings-screen:not([hidden])');

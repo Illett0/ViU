@@ -41,6 +41,16 @@
         <button id="btn-history" class="btn btn-icon btn-history" title="閲覧履歴" data-en-title="History" aria-label="閲覧履歴" data-en-aria-label="History" aria-haspopup="menu" aria-expanded="false" aria-controls="history-menu" disabled>&#9662;</button>
         <ul id="history-menu" class="history-menu" role="menu" aria-label="閲覧履歴" data-en-aria-label="History" hidden></ul>
       </div>
+      <div class="bookmark-nav">
+        <button id="btn-bookmarks" class="btn btn-icon" title="ブックマーク" data-en-title="Bookmarks" aria-label="ブックマーク" data-en-aria-label="Bookmarks" aria-expanded="false" aria-controls="bookmark-panel" disabled>&#9734;</button>
+        <div id="bookmark-panel" class="history-menu bookmark-panel" role="dialog" aria-label="ブックマーク" data-en-aria-label="Bookmarks" hidden>
+          <form id="bookmark-form" class="bookmark-form">
+            <input id="bookmark-name" type="text" maxlength="80" aria-label="ブックマーク名" data-en-aria-label="Bookmark name" />
+            <button type="submit" class="btn btn-primary btn-small" data-en="Add">追加</button>
+          </form>
+          <ul id="bookmark-list" class="bookmark-list"></ul>
+        </div>
+      </div>
       <button id="btn-settings" class="btn" hidden data-en="&#9881; Settings">&#9881; 設定</button>
       <button id="btn-privacy" class="btn btn-privacy" title="プライバシー保護モードの切り替え" data-en-title="Toggle privacy mode">
         <span id="privacy-icon">&#128274;</span>
@@ -232,8 +242,8 @@
         </p>
         <button id="btn-clear-cache" class="btn" data-en="Clear cache">キャッシュをクリア</button>
         <p id="cache-clear-result" class="empty-note" hidden></p>
-        <p class="settings-cache-text settings-delete-all-text" data-en="Deletes everything ViU has saved on this PC, including the recent-files history, in-app backups (copies of loaded timelines), exclusion zones and the linked photo folder. Use this before giving away the PC or uninstalling the app. Your original timeline file and photos are not deleted.">
-          最近使ったファイルの履歴・アプリ内バックアップ（読み込んだタイムラインのコピー）・除外ゾーン・写真フォルダの連携設定を含め、
+        <p class="settings-cache-text settings-delete-all-text" data-en="Deletes everything ViU has saved on this PC, including the recent-files history, in-app backups (copies of loaded timelines), exclusion zones, bookmarks and the linked photo folder. Use this before giving away the PC or uninstalling the app. Your original timeline file and photos are not deleted.">
+          最近使ったファイルの履歴・アプリ内バックアップ（読み込んだタイムラインのコピー）・除外ゾーン・ブックマーク・写真フォルダの連携設定を含め、
           ViUがこのPCに保存したデータをすべて削除します。PCを手放す・アプリをアンインストールする前などにご利用ください。
           元のタイムラインファイルや写真そのものは削除されません。
         </p>

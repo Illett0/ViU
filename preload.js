@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('pathBrowser', {
   reverseGeocode: (placeId, lat, lng) => ipcRenderer.invoke('timeline:reverse-geocode', { placeId, lat, lng }),
   getZones: () => ipcRenderer.invoke('timeline:get-zones'),
   saveZones: (zones) => ipcRenderer.invoke('timeline:save-zones', zones),
+  getBookmarks: () => ipcRenderer.invoke('bookmarks:get'),
+  saveBookmarks: (list) => ipcRenderer.invoke('bookmarks:save', list),
   exportMapPng: (rect) => ipcRenderer.invoke('timeline:export-png', rect),
   getRecentFiles: () => ipcRenderer.invoke('timeline:get-recent-files'),
   resolveRecentFile: (hash) => ipcRenderer.invoke('timeline:resolve-recent-file', hash),

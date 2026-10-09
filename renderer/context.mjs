@@ -13,6 +13,7 @@ state.municipalityByCode = new Map();
 state.renderGen = 0;
 state.granularity = 'prefecture';
 state.zones = [];
+state.bookmarks = []; // issue #35, see bookmarks.mjs
 state.sortBy = 'count';
 state.chronologyIncludeMuni = false;
 state.dismissedSuggestions = new Set();
@@ -56,6 +57,11 @@ export const el = {
   btnForward: document.getElementById('btn-forward'),
   btnHistory: document.getElementById('btn-history'),
   historyMenu: document.getElementById('history-menu'),
+  btnBookmarks: document.getElementById('btn-bookmarks'),
+  bookmarkPanel: document.getElementById('bookmark-panel'),
+  bookmarkForm: document.getElementById('bookmark-form'),
+  bookmarkName: document.getElementById('bookmark-name'),
+  bookmarkList: document.getElementById('bookmark-list'),
   btnSettings: document.getElementById('btn-settings'),
   btnPrivacy: document.getElementById('btn-privacy'),
   privacyLabel: document.getElementById('privacy-label'),
