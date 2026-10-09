@@ -15,6 +15,16 @@ const HISTORY_FILE = path.join(__dirname, 'fixtures', 'timeline.history.json');
 const TOKYO = 13;
 const KYOTO = 26;
 
+// Leaflet snaps each map's center to whole pixels, so two maps of slightly
+// different heights can disagree by a pixel — compare within 2 px at this zoom.
+function assertSameCamera(l, r) {
+  assert.strictEqual(r.zoom, l.zoom);
+  const twoPx = (2 * 360) / (256 * 2 ** l.zoom);
+  const dLat = Math.abs(r.center.lat - l.center.lat);
+  const dLng = Math.abs(r.center.lng - l.center.lng);
+  assert(dLat < twoPx && dLng < twoPx, `cameras differ: ${JSON.stringify(l.center)} vs ${JSON.stringify(r.center)}`);
+}
+
 async function main() {
   const { step, stepNames } = createStepRunner();
   const { app, page, userDataDir } = await launchApp({ PATHBROWSER_TEST_FILE: HISTORY_FILE });
@@ -66,8 +76,7 @@ async function main() {
       assert.strictEqual(right[TOKYO].color, '#ff7f0e', 'the selected prefecture is outlined on the right map too');
       const l = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
       const r = await page.evaluate(() => window.__pathBrowserTest.getCompareView());
-      assert.strictEqual(r.zoom, l.zoom);
-      assert(Math.abs(r.center.lat - l.center.lat) < 1e-6 && Math.abs(r.center.lng - l.center.lng) < 1e-6, `${JSON.stringify(l.center)} vs ${JSON.stringify(r.center)}`);
+      assertSameCamera(l, r);
     });
 
     await step('panning the right map moves the left one', async () => {
@@ -75,7 +84,7 @@ async function main() {
       await settle(page);
       const l = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
       const r = await page.evaluate(() => window.__pathBrowserTest.getCompareView());
-      assert(Math.abs(r.center.lat - l.center.lat) < 1e-6 && Math.abs(r.center.lng - l.center.lng) < 1e-6);
+      assertSameCamera(l, r);
     });
 
     await step('turning comparison off restores the detail panel', async () => {
