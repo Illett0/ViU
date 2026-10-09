@@ -11,6 +11,7 @@ import { resetLabelQueue, watchRankingRowsForLabelFetch } from './labels.mjs';
 import { getVisiblePhotos, openPhotoLightbox, photosForPlace, resolvePlaceName } from './photos.mjs';
 import { openDayView } from './routeTab.mjs';
 import { render } from './app.mjs';
+import { tr } from './i18n.mjs';
 
 // A 滞在地点 pin always wins a pixel-exact overlap with a photo pin (see
 // mapView.mjs's clusterMarkerPane/photoMarkerPane z-order, issue #23), so a
@@ -309,10 +310,10 @@ export function wireBackLink() {
 
 export function renderNationalDetail(derived) {
   const parts = [];
-  parts.push('<h2>日本全体</h2>');
-  parts.push('<p style="color:var(--color-text-dim); font-size:13px;">都道府県（または市区町村）をクリックすると詳細が表示されます。</p>');
+  parts.push(`<h2>${tr('日本全体', 'All of Japan')}</h2>`);
+  parts.push('<p style="color:var(--color-text-dim); font-size:13px;">' + tr('都道府県（または市区町村）をクリックすると詳細が表示されます。', 'Click a prefecture (or municipality) to see its details.') + '</p>');
   if (derived.newlyVisited && derived.newlyVisited.length > 0) {
-    parts.push(`<h3>${state.filter.year}年に初めて訪れた県</h3>`);
+    parts.push(`<h3>${tr('{y}年に初めて訪れた県', 'Prefectures first visited in {y}', { y: state.filter.year })}</h3>`);
     parts.push('<ul class="newly-visited-list">' + derived.newlyVisited.map((p) => `<li>${p.name}</li>`).join('') + '</ul>');
   }
   el.detailPanelContent.innerHTML = parts.join('');
@@ -320,7 +321,7 @@ export function renderNationalDetail(derived) {
 
 export function renderPrefectureDetail(derived, code) {
   const entry = derived.periodAggregates.get(code);
-  const name = entry ? entry.name : '不明';
+  const name = entry ? entry.name : tr('不明', 'Unknown');
   const placeCount = entry ? entry.placeCount : 0;
   const stayCount = entry ? entry.stayCount : 0;
   const firstDate = entry && entry.firstEpoch ? localDateStr(entry.firstEpoch) : '-';
@@ -335,20 +336,20 @@ export function renderPrefectureDetail(derived, code) {
   const passOnlyMuniInPref = [...derived.muniAggregates.values()].filter((m) => m.prefCode === code && isPassOnly(m)).length;
 
   const parts = [];
-  parts.push('<button class="back-link" data-nav="back">← 日本地図に戻る</button>');
+  parts.push('<button class="back-link" data-nav="back">' + tr('← 日本地図に戻る', '← Back to the map of Japan') + '</button>');
   parts.push(`<h2>${name}</h2>`);
   // placeCount (distinct 滞在地点数) is now the map の塗り分け/ランキング指標
   // — shown first, with the raw visit-event count (stayCount) kept right
   // after as a separate, still-useful stat (how often, vs. how many places).
-  parts.push(`<div class="stat-row"><span class="label">訪問地点数</span><span>${placeCount} 件</span></div>`);
-  parts.push(`<div class="stat-row"><span class="label">滞在回数</span><span>${stayCount} 回</span></div>`);
-  parts.push(`<div class="stat-row"><span class="label">最初に訪れた日</span><span>${firstDate}</span></div>`);
-  parts.push(`<div class="stat-row"><span class="label">最後に訪れた日</span><span>${lastDate}</span></div>`);
-  parts.push(`<div class="stat-row"><span class="label">合計滞在時間</span><span>${formatDuration(totalDwell)}</span></div>`);
-  parts.push(`<div class="stat-row"><span class="label">平均滞在時間</span><span>${formatDuration(avgDwell)}</span></div>`);
-  parts.push(`<div class="stat-row"><span class="label">市区町村制覇率</span><span>${visitedMuniInPref} / ${totalMuniInPref}</span></div>`);
+  parts.push(`<div class="stat-row"><span class="label">${tr('訪問地点数', 'Places visited')}</span><span>${tr('{n} 件', '{n}', { n: placeCount })}</span></div>`);
+  parts.push(`<div class="stat-row"><span class="label">${tr('滞在回数', 'Stays')}</span><span>${tr('{n} 回', '{n}', { n: stayCount })}</span></div>`);
+  parts.push(`<div class="stat-row"><span class="label">${tr('最初に訪れた日', 'First visit')}</span><span>${firstDate}</span></div>`);
+  parts.push(`<div class="stat-row"><span class="label">${tr('最後に訪れた日', 'Last visit')}</span><span>${lastDate}</span></div>`);
+  parts.push(`<div class="stat-row"><span class="label">${tr('合計滞在時間', 'Total time spent')}</span><span>${formatDuration(totalDwell)}</span></div>`);
+  parts.push(`<div class="stat-row"><span class="label">${tr('平均滞在時間', 'Average stay')}</span><span>${formatDuration(avgDwell)}</span></div>`);
+  parts.push(`<div class="stat-row"><span class="label">${tr('市区町村制覇率', 'Municipalities covered')}</span><span>${visitedMuniInPref} / ${totalMuniInPref}</span></div>`);
   if (passOnlyMuniInPref > 0) {
-    parts.push(`<div class="stat-row"><span class="label">通過のみの市区町村</span><span>${passOnlyMuniInPref}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('通過のみの市区町村', 'Municipalities passed through only')}</span><span>${passOnlyMuniInPref}</span></div>`);
   }
 
   // Exclusion-zone-filtered rows for ranking/pins/visit-lists, per spec.
@@ -360,9 +361,9 @@ export function renderPrefectureDetail(derived, code) {
     ui.currentDetailPrefCode = code;
   }
 
-  parts.push('<h3 style="margin-top:16px;">滞在地点</h3>');
+  parts.push(`<h3 style="margin-top:16px;">${tr('滞在地点', 'Stay points')}</h3>`);
   if (rows.length === 0) {
-    parts.push('<p class="empty-note">この期間の滞在データはありません。</p>');
+    parts.push(`<p class="empty-note">${tr('この期間の滞在データはありません。', 'No stays in this period.')}</p>`);
   } else {
     parts.push(
       rows
@@ -371,7 +372,7 @@ export function renderPrefectureDetail(derived, code) {
             r.clusterId != null && !state.privacy
               ? `<span class="detail-name" data-cluster-id="${r.clusterId}" data-muni-name="${escapeHtml(r.muniName)}">${escapeHtml(formatPlaceLabel(r.muniName, state.placeLabelCache.get(r.clusterId)))}</span>`
               : r.muniName;
-          return `<div class="place-item" data-cluster-id="${r.clusterId ?? ''}" data-muni-code="${r.muniCode ?? ''}"><span class="place-count">${r.count}回</span> — ${nameHtml}</div>`;
+          return `<div class="place-item" data-cluster-id="${r.clusterId ?? ''}" data-muni-code="${r.muniCode ?? ''}"><span class="place-count">${tr('{n}回', '{n}×', { n: r.count })}</span> — ${nameHtml}</div>`;
         })
         .join('')
     );
@@ -407,7 +408,7 @@ export function renderPrefectureDetail(derived, code) {
     const islandRows = rows.filter((r) => r.lat != null && !bounds.contains([r.lat, r.lng]));
     if (islandRows.length > 0) {
       el.islandBadge.hidden = false;
-      el.islandBadge.innerHTML = `離島に訪問済みの地点があります（${islandRows.length}件） <button class="btn btn-icon" id="btn-jump-island">ジャンプ</button>`;
+      el.islandBadge.innerHTML = `${tr('離島に訪問済みの地点があります（{n}件）', 'You have visited places on remote islands ({n})', { n: islandRows.length })} <button class="btn btn-icon" id="btn-jump-island">${tr('ジャンプ', 'Jump')}</button>`;
       document.getElementById('btn-jump-island').addEventListener('click', () => {
         ui.map.fitBounds(L.latLngBounds(islandRows.map((r) => [r.lat, r.lng])), { padding: [40, 40] });
       });
@@ -425,7 +426,7 @@ export function renderPlaceDetail(derived, params) {
     ui.placeGalleryCancel = null;
   }
 
-  const backLabel = state.granularity === 'municipality' ? '市区町村マップに戻る' : '都道府県に戻る';
+  const backLabel = state.granularity === 'municipality' ? tr('市区町村マップに戻る', 'Back to the municipality map') : tr('都道府県に戻る', 'Back to the prefecture');
   parts.push(`<button class="back-link" data-nav="back">← ${backLabel}</button>`);
 
   if (clusterId != null && !state.privacy) {
@@ -441,20 +442,20 @@ export function renderPlaceDetail(derived, params) {
     const totalDwell = memberVisits.reduce((s, v) => s + dwellMs(v), 0);
     const avgDwell = memberVisits.length ? totalDwell / memberVisits.length : 0;
 
-    parts.push('<h2>滞在地点</h2>');
-    parts.push(`<div class="stat-row"><span class="label">都道府県</span><span>${prefEntry ? prefEntry.name : ''}</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">市区町村</span><span>${muniLabel}</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">詳細地名</span><span id="nominatim-label">取得中…</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">この期間の滞在回数</span><span>${memberVisits.length} 回</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">合計滞在時間</span><span>${formatDuration(totalDwell)}</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">平均滞在時間</span><span>${formatDuration(avgDwell)}</span></div>`);
+    parts.push(`<h2>${tr('滞在地点', 'Stay point')}</h2>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('都道府県', 'Prefecture')}</span><span>${prefEntry ? prefEntry.name : ''}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('市区町村', 'Municipality')}</span><span>${muniLabel}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('詳細地名', 'Place name')}</span><span id="nominatim-label">${tr('取得中…', 'Loading…')}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('この期間の滞在回数', 'Stays in this period')}</span><span>${tr('{n} 回', '{n}', { n: memberVisits.length })}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('合計滞在時間', 'Total time spent')}</span><span>${formatDuration(totalDwell)}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('平均滞在時間', 'Average stay')}</span><span>${formatDuration(avgDwell)}</span></div>`);
     if (modal) {
-      parts.push(`<div class="stat-row"><span class="label">座標（補助情報）</span><span>${modal.lat.toFixed(4)}, ${modal.lng.toFixed(4)}</span></div>`);
+      parts.push(`<div class="stat-row"><span class="label">${tr('座標（補助情報）', 'Coordinates (for reference)')}</span><span>${modal.lat.toFixed(4)}, ${modal.lng.toFixed(4)}</span></div>`);
     }
-    parts.push('<h3 style="margin-top:16px;">滞在日一覧</h3><p class="panel-hint">日付をクリックすると、その日の経路マップを表示します。</p>');
+    parts.push(`<h3 style="margin-top:16px;">${tr('滞在日一覧', 'Days stayed')}</h3><p class="panel-hint">${tr('日付をクリックすると、その日の経路マップを表示します。', 'Click a date to see the route map for that day.')}</p>`);
     parts.push(
       memberVisits
-        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" aria-label="${v.dateStr} の経路を表示">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
+        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: v.dateStr })}">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
         .join('')
     );
 
@@ -464,7 +465,7 @@ export function renderPlaceDetail(derived, params) {
     const allPlacePhotos = photosForPlace(memberVisits);
     const placePhotos = allPlacePhotos.slice(0, MAX_GALLERY_PHOTOS);
     if (placePhotos.length > 0) {
-      parts.push('<h3 style="margin-top:16px;">この場所の写真</h3>');
+      parts.push(`<h3 style="margin-top:16px;">${tr('この場所の写真', 'Photos taken here')}</h3>`);
       parts.push(galleryHtml(placePhotos, allPlacePhotos.length));
     }
 
@@ -482,7 +483,7 @@ export function renderPlaceDetail(derived, params) {
       window.pathBrowser.reverseGeocode(modal.placeId, modal.lat, modal.lng).then((res) => {
         if (state.renderGen !== gen) return; // user navigated away before this resolved
         const target = el.detailPanelContent.querySelector('#nominatim-label');
-        if (target) target.textContent = res.label || '（取得できませんでした）';
+        if (target) target.textContent = res.label || tr('（取得できませんでした）', '(not available)');
       });
       ui.map.panTo([modal.lat, modal.lng]);
     }
@@ -492,14 +493,14 @@ export function renderPlaceDetail(derived, params) {
     const rows = computeClusterRanking({ visits: scopedVisits }, { privacy: true, municipalityByCode: state.municipalityByCode, limit: null });
     const row = rows.find((r) => r.muniCode === muniCode);
 
-    parts.push('<h2>市区町村</h2>');
-    parts.push(`<div class="stat-row"><span class="label">都道府県</span><span>${prefEntry ? prefEntry.name : ''}</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">市区町村</span><span>${row ? row.muniName : '不明'}</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">この期間の滞在回数</span><span>${row ? row.count : 0} 回</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">合計滞在時間</span><span>${row ? formatDuration(row.dwellMs) : '-'}</span></div>`);
-    if (row && row.firstEpoch) parts.push(`<div class="stat-row"><span class="label">最初に訪れた日</span><span>${localDateStr(row.firstEpoch)}</span></div>`);
-    if (row && row.lastEpoch) parts.push(`<div class="stat-row"><span class="label">最後に訪れた日</span><span>${localDateStr(row.lastEpoch)}</span></div>`);
-    parts.push('<div class="privacy-note">プライバシー保護モードのため、市区町村単位の情報のみ表示しています。</div>');
+    parts.push(`<h2>${tr('市区町村', 'Municipality')}</h2>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('都道府県', 'Prefecture')}</span><span>${prefEntry ? prefEntry.name : ''}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('市区町村', 'Municipality')}</span><span>${row ? row.muniName : tr('不明', 'Unknown')}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('この期間の滞在回数', 'Stays in this period')}</span><span>${tr('{n} 回', '{n}', { n: row ? row.count : 0 })}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('合計滞在時間', 'Total time spent')}</span><span>${row ? formatDuration(row.dwellMs) : '-'}</span></div>`);
+    if (row && row.firstEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最初に訪れた日', 'First visit')}</span><span>${localDateStr(row.firstEpoch)}</span></div>`);
+    if (row && row.lastEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最後に訪れた日', 'Last visit')}</span><span>${localDateStr(row.lastEpoch)}</span></div>`);
+    parts.push(`<div class="privacy-note">${tr('プライバシー保護モードのため、市区町村単位の情報のみ表示しています。', 'Privacy mode is on, so only municipality-level information is shown.')}</div>`);
 
     el.detailPanelContent.innerHTML = parts.join('');
     wireBackLink();
@@ -511,15 +512,15 @@ export function renderBreadcrumb() {
   const crumbs = [];
   const view = currentView(state);
 
-  crumbs.push({ label: '日本地図', view: 'national', params: {} });
+  crumbs.push({ label: tr('日本地図', 'Japan'), view: 'national', params: {} });
 
   if (view.view === 'prefecture' || view.view === 'place') {
     const code = view.params.code;
     const pref = state.raw.prefectures.find((p) => p.code === code);
-    crumbs.push({ label: pref ? pref.name : '県', view: 'prefecture', params: { code } });
+    crumbs.push({ label: pref ? pref.name : tr('県', 'Prefecture'), view: 'prefecture', params: { code } });
   }
   if (view.view === 'place') {
-    crumbs.push({ label: '滞在地点', view: 'place', params: view.params });
+    crumbs.push({ label: tr('滞在地点', 'Stay point'), view: 'place', params: view.params });
   }
 
   el.breadcrumb.innerHTML = crumbs

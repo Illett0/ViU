@@ -98,6 +98,9 @@ async function launchApp(extraEnv = {}) {
       PATHBROWSER_TEST_FILE: FIXTURE_FILE,
       PATHBROWSER_TEST_PHOTO_FOLDER: PHOTO_FOLDER,
       PATHBROWSER_TEST_USERDATA: userDataDir,
+      // The suite's assertions read the Japanese UI; pin it regardless of the
+      // machine's OS language (a spec can override this via extraEnv).
+      PATHBROWSER_TEST_LANG: 'ja',
       ...extraEnv,
     },
   });
@@ -137,10 +140,9 @@ async function completeOnboarding(page, step) {
   await step('link the fixture photo folder and wait for the scan to finish', async () => {
     await page.click('#btn-link-photo-folder');
     await page.waitForFunction(
-      () => {
-        const el = document.getElementById('photo-scan-summary');
-        return !!(el && el.textContent && el.textContent.includes('枚中'));
-      },
+      // Language-independent: the rescan button is revealed only once a scan
+      // has succeeded, and the link button is re-enabled when it finishes.
+      () => !document.getElementById('btn-rescan-photo-folder').hidden && !document.getElementById('btn-link-photo-folder').disabled,
       { timeout: 30000 }
     );
   });

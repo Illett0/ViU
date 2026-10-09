@@ -6,6 +6,8 @@
 // this module only knows about `photos` records ({filePath, lat, lng,
 // takenAtMs, source}) and Leaflet.
 
+import { numberLocale, tr } from './i18n.mjs';
+
 const PHOTO_MARKER_COLOR = '#e377c2';
 const PHOTO_MARKER_BORDER = '#ffffff';
 const PHOTO_MARKER_PANE = 'photoMarkerPane';
@@ -27,10 +29,10 @@ function ensurePhotoPane(map) {
 }
 
 function formatTakenAt(ms, isFallback) {
-  if (ms == null) return '撮影日時不明';
+  if (ms == null) return tr('撮影日時不明', 'Date taken unknown');
   const d = new Date(ms);
   const s = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return isFallback ? `${s}（推定・ファイル作成日時）` : s;
+  return isFallback ? s + tr('（推定・ファイル作成日時）', ' (estimated from file creation time)') : s;
 }
 
 // `estimationGapMs` — how far the timeline sample used for the estimate was
@@ -39,15 +41,15 @@ function formatTakenAt(ms, isFallback) {
 function formatEstimationGap(ms) {
   if (ms == null || ms <= 0) return '';
   const minutes = Math.round(ms / 60000);
-  if (minutes < 60) return `（記録との時間差: 約${minutes}分）`;
+  if (minutes < 60) return tr('（記録との時間差: 約{n}分）', ' (about {n} min from the nearest record)', { n: minutes });
   const hours = Math.round(minutes / 60);
-  return `（記録との時間差: 約${hours}時間）`;
+  return tr('（記録との時間差: 約{n}時間）', ' (about {n} h from the nearest record)', { n: hours });
 }
 
 function sourceLabel(photo) {
-  if (photo.source === 'exif') return '位置情報: Exif';
-  if (photo.source === 'takeout') return '位置情報: Google Takeout';
-  if (photo.source === 'estimated') return `位置情報: 推定${formatEstimationGap(photo.estimationGapMs)}`;
+  if (photo.source === 'exif') return tr('位置情報: Exif', 'Location: Exif');
+  if (photo.source === 'takeout') return tr('位置情報: Google Takeout', 'Location: Google Takeout');
+  if (photo.source === 'estimated') return tr('位置情報: 推定', 'Location: estimated') + formatEstimationGap(photo.estimationGapMs);
   return '';
 }
 
@@ -55,12 +57,12 @@ function popupHtml(photo, placeName) {
   const estimated = photo.source === 'estimated';
   return `
     <div class="photo-popup">
-      <div class="photo-popup-thumb-wrap"><span class="photo-popup-loading">読み込み中…</span></div>
+      <div class="photo-popup-thumb-wrap"><span class="photo-popup-loading">${tr('読み込み中…', 'Loading…')}</span></div>
       <div class="photo-popup-meta">
         <div class="photo-popup-date">${formatTakenAt(photo.takenAtMs, photo.takenAtIsFallback)}</div>
         ${placeName ? `<div class="photo-popup-place">${placeName}</div>` : ''}
         <div class="photo-popup-source">${sourceLabel(photo)}</div>
-        ${estimated ? '<div class="photo-popup-estimated-notice">タイムラインの移動記録から推定した位置です。実際の撮影地点と異なる場合があります。</div>' : ''}
+        ${estimated ? `<div class="photo-popup-estimated-notice">${tr('タイムラインの移動記録から推定した位置です。実際の撮影地点と異なる場合があります。', 'This location was estimated from your timeline records and may differ from where the photo was actually taken.')}</div>` : ''}
       </div>
     </div>`;
 }
@@ -86,13 +88,13 @@ export function galleryHtml(photos, totalCount) {
   const thumbs = photos
     .map(
       (photo, i) =>
-        `<div class="photo-cluster-popup-thumb-wrap${photo.source === 'estimated' ? ' photo-cluster-popup-thumb-wrap--estimated' : ''}" data-index="${i}" title="${photo.source === 'estimated' ? '推定位置の写真' : ''}"><span class="photo-popup-loading">…</span></div>`
+        `<div class="photo-cluster-popup-thumb-wrap${photo.source === 'estimated' ? ' photo-cluster-popup-thumb-wrap--estimated' : ''}" data-index="${i}" title="${photo.source === 'estimated' ? tr('推定位置の写真', 'Photo with estimated location') : ''}"><span class="photo-popup-loading">…</span></div>`
     )
     .join('');
   const countLabel =
     totalCount > photos.length
-      ? `${photos.length}枚を表示中（他${totalCount - photos.length}枚 — ズームインして絞り込んでください）`
-      : `${photos.length}枚の写真`;
+      ? tr('{n}枚を表示中（他{rest}枚 — ズームインして絞り込んでください）', 'Showing {n} photos ({rest} more — zoom in to narrow down)', { n: photos.length, rest: totalCount - photos.length })
+      : tr('{n}枚の写真', '{n} photos', { n: photos.length });
   return `
     <div class="photo-cluster-popup">
       <div class="photo-cluster-popup-count">${countLabel}</div>
@@ -133,10 +135,10 @@ export function loadGalleryThumbnails(containerEl, photos, { onOpenLightbox } = 
         // Keyboard-operable like a button (and focusable, so focus can
         // return here when the lightbox closes).
         const name = photo.filePath.split(/[\\/]/).pop();
-        const when = photo.takenAtMs != null ? new Date(photo.takenAtMs).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const when = photo.takenAtMs != null ? new Date(photo.takenAtMs).toLocaleString(numberLocale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
         wrap.setAttribute('role', 'button');
         wrap.setAttribute('tabindex', '0');
-        wrap.setAttribute('aria-label', `写真を拡大表示: ${name}${when ? `（${when}）` : ''}${photo.source === 'estimated' ? '、位置は推定' : ''}`);
+        wrap.setAttribute('aria-label', tr('写真を拡大表示: ', 'Enlarge photo: ') + name + (when ? tr('（{w}）', ' ({w})', { w: when }) : '') + (photo.source === 'estimated' ? tr('、位置は推定', ', estimated location') : ''));
         wrap.addEventListener('click', open);
         wrap.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -145,7 +147,7 @@ export function loadGalleryThumbnails(containerEl, photos, { onOpenLightbox } = 
           }
         });
       } else {
-        wrap.innerHTML = '<span class="photo-popup-unsupported">非対応</span>';
+        wrap.innerHTML = `<span class="photo-popup-unsupported">${tr('非対応', 'Unsupported')}</span>`;
       }
     }
     await fetchNext();
@@ -223,7 +225,7 @@ function createPhotoMarker(photo, { resolvePlaceName, onOpenLightbox } = {}) {
         if (onOpenLightbox) onOpenLightbox(result.dataUrl, photo);
       });
     } else {
-      thumbWrap.innerHTML = '<div class="photo-popup-unsupported">プレビューを生成できませんでした</div>';
+      thumbWrap.innerHTML = `<div class="photo-popup-unsupported">${tr('プレビューを生成できませんでした', 'Could not generate a preview')}</div>`;
     }
   });
 

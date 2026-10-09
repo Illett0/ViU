@@ -3,6 +3,7 @@
 // click/slider/button interaction wiring and persistence.
 
 import { addZoomControl } from './mapView.mjs';
+import { tr } from './i18n.mjs';
 
 export function initZoneMap(containerEl) {
   const map = L.map(containerEl, { center: [36.5, 138], zoom: 5, minZoom: 3, zoomControl: false });
@@ -52,11 +53,11 @@ export function renderPendingCircle(map, pendingLayerRef, center, radiusMeters) 
 
 export function renderZoneList(container, zones, { labelFor, onDelete }) {
   if (zones.length === 0) {
-    container.innerHTML = '<p class="empty-note">登録されているゾーンはありません。</p>';
+    container.innerHTML = `<p class="empty-note">${tr('登録されているゾーンはありません。', 'No zones registered.')}</p>`;
     return;
   }
   container.innerHTML = zones
-    .map((z, i) => `<li><span>${labelFor(z, i)} — 半径${z.radiusMeters}m</span><button class="zone-delete" data-index="${i}">削除</button></li>`)
+    .map((z, i) => `<li><span>${labelFor(z, i)} — ${tr('半径', 'radius ')}${z.radiusMeters}m</span><button class="zone-delete" data-index="${i}">${tr('削除', 'Delete')}</button></li>`)
     .join('');
   container.querySelectorAll('.zone-delete').forEach((btn) => {
     btn.addEventListener('click', () => onDelete(Number(btn.dataset.index)));
@@ -72,8 +73,8 @@ export function renderSuggestions(container, suggestions, { onAccept, onDismiss 
     .map(
       (s, i) =>
         `<div class="zone-suggestion"><span>${s.text}</span><span>` +
-        `<button class="btn btn-primary" data-accept="${i}">除外ゾーンに追加</button> ` +
-        `<button class="btn" data-dismiss="${i}">閉じる</button></span></div>`
+        `<button class="btn btn-primary" data-accept="${i}">${tr('除外ゾーンに追加', 'Add as exclusion zone')}</button> ` +
+        `<button class="btn" data-dismiss="${i}">${tr('閉じる', 'Dismiss')}</button></span></div>`
     )
     .join('');
   container.querySelectorAll('[data-accept]').forEach((btn) => btn.addEventListener('click', () => onAccept(Number(btn.dataset.accept))));

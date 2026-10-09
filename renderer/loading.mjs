@@ -7,6 +7,9 @@ import { applyPhotoEstimates } from './photos.mjs';
 import { stopTimelapse } from './timelapse.mjs';
 import { handleMapBackgroundClick } from './mapTab.mjs';
 import { render, resetNavigationToNational, scheduleMuniViewportRedraw } from './app.mjs';
+import { localizePrefectureRecords, tr } from './i18n.mjs';
+
+const MONTH_NAMES_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function formatBytes(n) {
   if (n == null) return '';
@@ -32,10 +35,10 @@ export function renderRecentFilesList(list) {
       (e) => `
       <li class="recent-file-item" data-hash="${e.hash}">
         <button class="recent-file-open" data-hash="${e.hash}">
-          <span class="recent-file-name">${e.originalName || 'タイムライン.json'}</span>
-          <span class="recent-file-meta">${formatImportedAt(e.lastOpenedAt || e.importedAt)} ・ ${formatBytes(e.sizeBytes)}</span>
+          <span class="recent-file-name">${e.originalName || tr('タイムライン.json', 'timeline.json')}</span>
+          <span class="recent-file-meta">${formatImportedAt(e.lastOpenedAt || e.importedAt)} ${tr('・', '·')} ${formatBytes(e.sizeBytes)}</span>
         </button>
-        <button class="recent-file-remove" data-hash="${e.hash}" title="履歴から削除（バックアップも削除されます）">&times;</button>
+        <button class="recent-file-remove" data-hash="${e.hash}" title="${tr('履歴から削除（バックアップも削除されます）', 'Remove from history (also deletes the backup)')}">&times;</button>
       </li>`
     )
     .join('');
@@ -58,7 +61,7 @@ export async function openRecentFile(hash) {
     // Neither the original path nor the internal backup could be found
     // (e.g. the backup was manually deleted from disk outside the app).
     el.progressLabel.textContent = '';
-    alert('このファイルは見つかりませんでした（元のファイル・アプリ内バックアップともに利用できません）。履歴から削除します。');
+    alert(tr('このファイルは見つかりませんでした（元のファイル・アプリ内バックアップともに利用できません）。履歴から削除します。', 'This file could not be found (neither the original nor the in-app backup is available). It will be removed from the history.'));
     const updated = await window.pathBrowser.removeRecentFile(hash);
     renderRecentFilesList(updated || []);
     return;
@@ -76,17 +79,17 @@ export async function openFile(explicitPath) {
   el.welcome.hidden = true;
   el.progressScreen.hidden = false;
   el.progressFill.style.width = '0%';
-  el.progressLabel.textContent = '読み込み中...';
+  el.progressLabel.textContent = tr('読み込み中...', 'Loading...');
 
   const unsubscribe = window.pathBrowser.onProgress((payload) => {
     const phaseLabel =
       {
-        reading: 'ファイル読み込み中',
-        parsing: 'JSON解析中',
-        normalizing: '位置情報を正規化中',
-        municipality: '市区町村を判定中',
-        clustering: '滞在地点をクラスタリング中',
-        finalizing: '仕上げ中',
+        reading: tr('ファイル読み込み中', 'Reading file'),
+        parsing: tr('JSON解析中', 'Parsing JSON'),
+        normalizing: tr('位置情報を正規化中', 'Normalizing locations'),
+        municipality: tr('市区町村を判定中', 'Matching municipalities'),
+        clustering: tr('滞在地点をクラスタリング中', 'Clustering stay points'),
+        finalizing: tr('仕上げ中', 'Finishing up'),
       }[payload.phase] || payload.phase;
     const pct = payload.total > 0 ? Math.round((payload.current / payload.total) * 100) : 0;
     el.progressFill.style.width = pct + '%';
@@ -106,7 +109,7 @@ export async function openFile(explicitPath) {
     state.muniGeoJSON = muniGeoJSON;
     await finishLoadingIntoApp();
   } catch (err) {
-    el.progressLabel.textContent = '読み込みに失敗しました: ' + err.message;
+    el.progressLabel.textContent = tr('読み込みに失敗しました: ', 'Failed to load: ') + err.message;
   } finally {
     unsubscribe();
   }
@@ -127,7 +130,7 @@ export async function openPhotosOnly() {
   el.welcome.hidden = true;
   el.progressScreen.hidden = false;
   el.progressFill.style.width = '0%';
-  el.progressLabel.textContent = '読み込み中...';
+  el.progressLabel.textContent = tr('読み込み中...', 'Loading...');
 
   try {
     const [refLists, prefGeoJSON, muniGeoJSON] = await Promise.all([
@@ -153,14 +156,22 @@ export async function openPhotosOnly() {
     state.photoLayerVisible = true; // otherwise the map would show nothing at all until the user finds the toggle
     await finishLoadingIntoApp();
   } catch (err) {
-    el.progressLabel.textContent = '読み込みに失敗しました: ' + err.message;
+    el.progressLabel.textContent = tr('読み込みに失敗しました: ', 'Failed to load: ') + err.message;
   }
 }
 
 // Shared tail of openFile()/openPhotosOnly() — everything from here on only
 // cares that state.raw/prefGeoJSON/muniGeoJSON are already assigned, not
 // where they came from.
+// Prefecture names on the shared records follow the UI language (issue #22);
+// called on load and again on a language switch.
+export function localizePrefectureNames() {
+  if (state.raw) localizePrefectureRecords(state.raw.prefectures);
+  if (state.prefGeoJSON) localizePrefectureRecords(state.prefGeoJSON.features.map((f) => f.properties));
+}
+
 export async function finishLoadingIntoApp() {
+  localizePrefectureNames();
   state.municipalityByCode = buildMunicipalityIndex(state.raw.municipalities);
   state.clusterThreshold = 50;
   applyPhotoEstimates(); // a folder linked before this was open may now gain Stage3 estimates
@@ -219,9 +230,9 @@ export function populateYearOptions() {
   }
   const sorted = [...years].sort();
 
-  el.filterYear.innerHTML = '<option value="">すべて</option>' + sorted.map((y) => `<option value="${y}">${y}年</option>`).join('');
+  el.filterYear.innerHTML = `<option value="">${tr('すべて', 'All')}</option>` + sorted.map((y) => `<option value="${y}">${tr('{y}年', '{y}', { y })}</option>`).join('');
   el.filterMonth.innerHTML =
-    '<option value="">すべて</option>' + Array.from({ length: 12 }, (_, i) => i + 1).map((m) => `<option value="${m}">${m}月</option>`).join('');
+    `<option value="">${tr('すべて', 'All')}</option>` + Array.from({ length: 12 }, (_, i) => i + 1).map((m) => `<option value="${m}">${tr('{m}月', '{name}', { m, name: MONTH_NAMES_EN[m - 1] })}</option>`).join('');
 }
 
 // ---------- Re-clustering ----------
@@ -229,7 +240,7 @@ export function populateYearOptions() {
 export async function recluster(threshold) {
   if (!state.raw) return;
   state.clusterThreshold = threshold;
-  el.clusterThresholdLabel.textContent = threshold + 'm （再計算中…）';
+  el.clusterThresholdLabel.textContent = threshold + tr('m （再計算中…）', 'm (recalculating…)');
 
   const points = state.raw.visits.map((v) => ({ lat: v.lat, lng: v.lng, placeId: v.placeId }));
   try {
@@ -242,7 +253,7 @@ export async function recluster(threshold) {
     resetNavigationToNational();
     render();
   } catch (err) {
-    el.clusterThresholdLabel.textContent = threshold + 'm （失敗）';
+    el.clusterThresholdLabel.textContent = threshold + tr('m （失敗）', 'm (failed)');
     console.error('recluster failed', err);
   }
 }

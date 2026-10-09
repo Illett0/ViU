@@ -1,6 +1,8 @@
 // Pure data-aggregation helpers. No DOM access here so this stays testable
 // with plain Node and reusable between the map view and the stats view.
 
+import { tr } from './i18n.mjs';
+
 const PRIVACY_RADIUS_METERS = 1000;
 const TOKAIDO_53_KM = 490;
 const MAX_DWELL_MS = 24 * 60 * 60 * 1000;
@@ -361,9 +363,9 @@ function buildMunicipalityIndex(municipalityList) {
 }
 
 function municipalityName(municipalityByCode, code) {
-  if (!code) return '不明';
+  if (!code) return tr('不明', 'Unknown');
   const m = municipalityByCode && municipalityByCode.get(code);
-  return m ? m.name : '不明';
+  return m ? m.name : tr('不明', 'Unknown');
 }
 
 // Shared by the prefecture-detail ranking rows and the map pin tooltips, so
@@ -384,8 +386,8 @@ function escapeHtml(text) {
 }
 
 function formatPlaceLabel(muniName, cacheEntry) {
-  if (!cacheEntry || cacheEntry.status === 'pending') return `${muniName}（取得中…）`;
-  if (cacheEntry.status === 'done' && cacheEntry.label) return `${cacheEntry.label}（${muniName}）`;
+  if (!cacheEntry || cacheEntry.status === 'pending') return tr('{muni}（取得中…）', '{muni} (loading…)', { muni: muniName });
+  if (cacheEntry.status === 'done' && cacheEntry.label) return cacheEntry.label + tr('（{m}）', ' ({m})', { m: muniName });
   return muniName;
 }
 
@@ -559,7 +561,8 @@ function computeLongestTrips(data, municipalityByCode, limit = 10) {
     }));
 }
 
-const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+const DOW_LABELS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+const DOW_LABELS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // Average daily total distance, grouped by weekday (calendar days with zero
 // activity don't count toward the average for that weekday).
@@ -582,7 +585,7 @@ function computeDayOfWeekStats(data) {
     sums[dow].days += 1;
   }
 
-  return sums.map((s, i) => ({ dow: i, label: DOW_LABELS[i], avgDistance: s.days > 0 ? s.total / s.days : 0 }));
+  return sums.map((s, i) => ({ dow: i, label: tr(DOW_LABELS_JA[i], DOW_LABELS_EN[i]), avgDistance: s.days > 0 ? s.total / s.days : 0 }));
 }
 
 function computeHourlyHistogram(data) {

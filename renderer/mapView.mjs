@@ -2,6 +2,7 @@
 // municipality granularity) + prefecture drill-down.
 
 import { formatPlaceLabel, escapeHtml, isPassOnly } from './aggregate.mjs';
+import { tr } from './i18n.mjs';
 
 // Single-hue sequential blue for the choropleth (visit-count intensity), kept
 // deliberately far in hue from the orange pins/markers below so pins never
@@ -61,10 +62,10 @@ function fillColorFor(entry, max) {
 }
 
 function tooltipSuffix(entry) {
-  if (!entry) return '訪問地点 0 件';
-  if (isPassOnly(entry)) return '通過のみ';
-  if (entry.placeCount === 0 && entry.firstEpoch != null) return '通過のみ';
-  return `訪問地点 ${entry.placeCount} 件`;
+  if (!entry) return tr('訪問地点 0 件', '0 places visited');
+  if (isPassOnly(entry)) return tr('通過のみ', 'passed through only');
+  if (entry.placeCount === 0 && entry.firstEpoch != null) return tr('通過のみ', 'passed through only');
+  return tr('訪問地点 {n} 件', '{n} places visited', { n: entry.placeCount });
 }
 
 // Every map in the app puts its +/- buttons bottom-right (above the OSM
@@ -72,7 +73,7 @@ function tooltipSuffix(entry) {
 // count badge / 離島 badge overlays that live in that corner. Japanese
 // labels double as the buttons' accessible names.
 export function addZoomControl(map) {
-  L.control.zoom({ position: 'bottomright', zoomInTitle: '拡大', zoomOutTitle: '縮小' }).addTo(map);
+  L.control.zoom({ position: 'bottomright', zoomInTitle: tr('拡大', 'Zoom in'), zoomOutTitle: tr('縮小', 'Zoom out') }).addTo(map);
   return map;
 }
 
@@ -155,7 +156,7 @@ export function renderNational(map, geojsonLayerRef, geojson, aggregates, onClic
     onEachFeature: (feature, lyr) => {
       const entry = aggregates.get(feature.properties.code);
       const isSelected = selectedCode != null && feature.properties.code === selectedCode;
-      lyr.bindTooltip(`${feature.properties.name}（${tooltipSuffix(entry)}）`, { className: 'pref-tooltip' });
+      lyr.bindTooltip(feature.properties.name + tr('（{s}）', ' ({s})', { s: tooltipSuffix(entry) }), { className: 'pref-tooltip' });
       // Leaflet's SVG renderer paints features in the order they were added,
       // so a thick highlighted border can get partially painted-over by a
       // later-drawn neighbouring prefecture along their shared edge — the
@@ -240,7 +241,7 @@ function buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed = fa
       },
       onEachFeature: (feature, lyr) => {
         const entry = aggregates.get(feature.properties.code);
-        lyr.bindTooltip(`${feature.properties.name}（${tooltipSuffix(entry)}）`, { className: 'pref-tooltip' });
+        lyr.bindTooltip(feature.properties.name + tr('（{s}）', ' ({s})', { s: tooltipSuffix(entry) }), { className: 'pref-tooltip' });
         lyr.on('click', () => onClickMuni(feature.properties.code));
         // Same z-order fix as the prefecture layer (see renderNational) — a
         // hovered ward's thicker border would otherwise get partly hidden
@@ -389,7 +390,7 @@ export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labe
     });
     const labelEntry = labelCache && row.clusterId != null ? labelCache.get(row.clusterId) : null;
     const nameLabel = row.muniName ? escapeHtml(formatPlaceLabel(row.muniName, labelEntry)) : '';
-    marker.bindTooltip(`${nameLabel ? nameLabel + ' — ' : ''}滞在 ${row.count} 回`);
+    marker.bindTooltip(`${nameLabel ? nameLabel + ' — ' : ''}${tr('滞在 {n} 回', '{n} stays', { n: row.count })}`);
     marker.on('click', () => onClickRow(row));
     marker.addTo(markerLayerRef.layer);
     markersByKey.set(key, marker);

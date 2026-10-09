@@ -2,6 +2,7 @@
 
 import { el, state } from './context.mjs';
 import { getDerived, render } from './app.mjs';
+import { tr } from './i18n.mjs';
 
 export function getTimelapseSteps() {
   const keys = new Set();
@@ -38,8 +39,8 @@ export function tickTimelapse() {
     state.granularity === 'municipality'
       ? [...derived.muniAggregates.values()].filter((e) => e.stayCount > 0).length
       : [...derived.periodAggregates.values()].filter((e) => e.stayCount > 0 || e.firstEpoch != null).length;
-  el.timelapsePeriod.textContent = `${step.year}年${step.month}月`;
-  el.timelapseCount.textContent = `${state.granularity === 'municipality' ? '市区町村' : '都道府県'} ${count} 件`;
+  el.timelapsePeriod.textContent = tr('{y}年{m}月', '{y}-{mm}', { y: step.year, m: step.month, mm: String(step.month).padStart(2, '0') });
+  el.timelapseCount.textContent = state.granularity === 'municipality' ? tr('市区町村 {n} 件', '{n} municipalities', { n: count }) : tr('都道府県 {n} 件', '{n} prefectures', { n: count });
 
   state.timelapse.index += 1;
   if (state.timelapse.index >= state.timelapse.steps.length) {

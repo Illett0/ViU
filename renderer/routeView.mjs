@@ -3,6 +3,7 @@
 // from the nearest activity in time (see worker/parseWorker.js).
 
 import { addZoomControl } from './mapView.mjs';
+import { tr } from './i18n.mjs';
 
 // Design: 電車・地下鉄・路面電車 share one color family (red), バス・タクシー
 // share another (blue) — both deliberate per-family groupings (shades within
@@ -157,7 +158,7 @@ export function renderDayRoute(map, layerRef, segments, { labelFor }) {
     if (!seg.points || seg.points.length < 2) return;
     const color = colorForMode(seg.mode);
     const pattern = linePattern(seg.mode);
-    const tip = `${labelFor(seg.mode)}${seg.inferred ? '（推定区間）' : ''}${seg.trimmed ? '（除外ゾーン外の部分）' : ''} ${formatClock(seg.startEpoch)}–${formatClock(seg.endEpoch)}`;
+    const tip = `${labelFor(seg.mode)}${seg.inferred ? tr('（推定区間）', ' (inferred section)') : ''}${seg.trimmed ? tr('（除外ゾーン外の部分）', ' (part outside exclusion zones)') : ''} ${formatClock(seg.startEpoch)}–${formatClock(seg.endEpoch)}`;
 
     const casing = L.polyline(seg.points, {
       color: '#ffffff',

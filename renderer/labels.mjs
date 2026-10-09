@@ -3,6 +3,7 @@
 
 import { computeModalVisitLocation, formatPlaceLabel, escapeHtml } from './aggregate.mjs';
 import { el, state, ui } from './context.mjs';
+import { tr } from './i18n.mjs';
 
 // ---- On-demand detail-name fetch queue for the prefecture-detail ranking
 // list (see watchRankingRowsForLabelFetch below): sequential, visible-rows-first,
@@ -46,7 +47,7 @@ export function updateRowLabelDisplay(clusterId) {
   const marker = ui.currentMarkersByKey.get(clusterId);
   if (marker) {
     const muniName = marker.__muniName;
-    if (muniName) marker.setTooltipContent(`${escapeHtml(formatPlaceLabel(muniName, entry))} — 滞在 ${marker.__count} 回`);
+    if (muniName) marker.setTooltipContent(`${escapeHtml(formatPlaceLabel(muniName, entry))} — ${tr('滞在 {n} 回', '{n} stays', { n: marker.__count })}`);
   }
 }
 

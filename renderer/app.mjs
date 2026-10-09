@@ -9,13 +9,14 @@ import { renderChronology } from './chronologyView.mjs';
 import { applyPrivacy, applyExclusionZones, filterByPeriod, filterUpToPeriod, computePrefectureAggregates, computeMunicipalityAggregates, computeConquestRates, isPassOnly, computeDwellCapNote, computeClusterRanking, computeStats, computeWalkingComparisonRatio, computeLongestTrips, computeDayOfWeekStats, computeHourlyHistogram, computeTopDays, computeNewlyVisitedInYear, computeChronology } from './aggregate.mjs';
 import { el, state, ui } from './context.mjs';
 import { resetLabelQueue } from './labels.mjs';
-import { recluster, refreshRecentFilesList, wireLoading } from './loading.mjs';
-import { initPhotoLink, wirePhotos } from './photos.mjs';
+import { localizePrefectureNames, populateYearOptions, recluster, refreshRecentFilesList, wireLoading } from './loading.mjs';
+import { initPhotoLink, showUnlinkedPhotoFolder, wirePhotos } from './photos.mjs';
 import { renderBreadcrumb, renderMapTab } from './mapTab.mjs';
 import { renderRouteTab, wireRouteTab } from './routeTab.mjs';
 import { stopTimelapse, wireTimelapse } from './timelapse.mjs';
-import { wireSettings } from './settings.mjs';
+import { renderSettingsScreen, wireSettings } from './settings.mjs';
 import { installTestHooks } from './testHooks.mjs';
+import { applyStaticTranslations, setLanguage, tr } from './i18n.mjs';
 
 export function getDerived() {
   const privacyData = applyPrivacy(state.raw, state.privacy);
@@ -97,10 +98,10 @@ export function render() {
   const visitedMuniCount = [...derived.muniAggregates.values()].filter((e) => e.stayCount > 0).length;
   const passOnlyMuniCount = [...derived.muniAggregates.values()].filter(isPassOnly).length;
   if (state.granularity === 'municipality') {
-    const passNote = passOnlyMuniCount > 0 ? `<span class="pass-only-note"><span class="pass-only-swatch"></span>通過のみ ${passOnlyMuniCount}</span>` : '';
-    el.prefBadge.innerHTML = `<span class="count-num">${visitedMuniCount}</span> / ${state.raw.municipalities.length} 市区町村${passNote}`;
+    const passNote = passOnlyMuniCount > 0 ? `<span class="pass-only-note"><span class="pass-only-swatch"></span>${tr('通過のみ', 'Passed through')} ${passOnlyMuniCount}</span>` : '';
+    el.prefBadge.innerHTML = `<span class="count-num">${visitedMuniCount}</span> / ${state.raw.municipalities.length} ${tr('市区町村', 'municipalities')}${passNote}`;
   } else {
-    el.prefBadge.innerHTML = `<span class="count-num">${visitedPrefCount}</span> / ${state.raw.prefectures.length} 県`;
+    el.prefBadge.innerHTML = `<span class="count-num">${visitedPrefCount}</span> / ${state.raw.prefectures.length} ${tr('県', 'prefectures')}`;
   }
 
   if (state.tab === 'map') {
@@ -199,16 +200,20 @@ el.btnForward.addEventListener('click', () => {
   render();
 });
 
+function updatePrivacyLabel() {
+  el.btnPrivacy.classList.toggle('off', !state.privacy);
+  // The "プライバシーモード " prefix is hidden on narrow windows (CSS) to keep the
+  // header on fewer rows; the button's aria-label keeps the full name.
+  el.privacyLabel.innerHTML = `<span class="privacy-label-prefix">${tr('プライバシーモード', 'Privacy mode')} </span>${state.privacy ? 'ON' : 'OFF'}`;
+  el.btnPrivacy.setAttribute('aria-label', tr('プライバシーモード {v}（クリックで切り替え）', 'Privacy mode {v} (click to toggle)', { v: state.privacy ? 'ON' : 'OFF' }));
+  document.getElementById('privacy-icon').textContent = state.privacy ? '\u{1F512}' : '\u{1F513}';
+}
+
 export function setPrivacy(value) {
   const wasPrivacyOn = state.privacy;
   state.privacy = value;
   window.pathBrowser.setPrivacyMode(value);
-  el.btnPrivacy.classList.toggle('off', !state.privacy);
-  // The "プライバシーモード " prefix is hidden on narrow windows (CSS) to keep the
-  // header on fewer rows; the button's aria-label keeps the full name.
-  el.privacyLabel.innerHTML = `<span class="privacy-label-prefix">プライバシーモード </span>${state.privacy ? 'ON' : 'OFF'}`;
-  el.btnPrivacy.setAttribute('aria-label', `プライバシーモード ${state.privacy ? 'ON' : 'OFF'}（クリックで切り替え）`);
-  document.getElementById('privacy-icon').textContent = state.privacy ? '\u{1F512}' : '\u{1F513}';
+  updatePrivacyLabel();
   if (ui.map) applyPrivacyZoomLimit(ui.map, state.privacy);
   resetNavigationToNational();
   // issue #21: render()'s own privacy gate (`if (state.privacy) state.photoLayerVisible = false`)
@@ -287,12 +292,35 @@ el.chronologyIncludeMuni.addEventListener('change', () => {
   render();
 });
 
+// Live language switch from the settings screen (issue #22): static markup
+// is swapped by setLanguage(); everything built in JS is rebuilt here.
+export async function switchLanguage(next) {
+  await setLanguage(next);
+  localizePrefectureNames();
+  if (state.raw) {
+    populateYearOptions();
+    el.filterYear.value = state.filter.year ?? '';
+    el.filterMonth.value = state.filter.month ?? '';
+  }
+  if (el.photoLinkedFolder.dataset.unlinked) showUnlinkedPhotoFolder();
+  updatePrivacyLabel();
+  document.querySelectorAll('.leaflet-control-zoom-in').forEach((b) => b.setAttribute('title', tr('拡大', 'Zoom in')));
+  document.querySelectorAll('.leaflet-control-zoom-out').forEach((b) => b.setAttribute('title', tr('縮小', 'Zoom out')));
+  refreshRecentFilesList();
+  // render() decides which main screen is visible, so while the settings
+  // screen is open leave it to closeSettings() (which renders anyway).
+  if (!el.settingsScreen.hidden) renderSettingsScreen();
+  else render();
+}
+
 // ---------- Startup ----------
 
 // Keep the main process's reverse-geocode gate in sync with the renderer's
 // initial privacy state (see main.js app:set-privacy-mode) — matters after a
 // page reload, where the main process may still remember an earlier OFF.
 window.pathBrowser.setPrivacyMode(state.privacy);
+applyStaticTranslations();
+updatePrivacyLabel();
 wireLoading();
 wirePhotos();
 wireRouteTab();

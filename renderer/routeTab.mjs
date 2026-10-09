@@ -9,6 +9,7 @@ import { dayViewLayerRef, dayViewMarkerLayerRef, dayViewPhotoLayerRef, el, route
 import { getVisiblePhotos, openPhotoLightbox, resolvePlaceName, photosForDay } from './photos.mjs';
 import { enqueueLabelFetch, onPlaceLabelUpdated } from './labels.mjs';
 import { getDerived } from './app.mjs';
+import { numberLocale, tr } from './i18n.mjs';
 
 // Which transport modes are currently toggled off in the route map legend —
 // module-level (not part of `state`) since it's a pure display filter for
@@ -38,7 +39,7 @@ export function renderRouteTab(derived) {
 
   if (segments.length === 0) {
     el.routeMessage.hidden = false;
-    el.routeMessage.textContent = 'この期間に表示できる経路データがありません。';
+    el.routeMessage.textContent = tr('この期間に表示できる経路データがありません。', 'No route data to show for this period.');
     clearRoute(ui.routeMap, routeLayerRef);
     el.routeLegend.innerHTML = '';
     return;
@@ -60,13 +61,13 @@ export function renderRouteTab(derived) {
   // trace was available for that trip) are drawn dashed — call that out once
   // rather than per-color, since it's a line style, not a mode.
   if (segments.some((s) => s.inferred)) {
-    legendItems.push('<span class="legend-item legend-item-inferred">┄ 推定区間（詳細な経路データなし）</span>');
+    legendItems.push(`<span class="legend-item legend-item-inferred">┄ ${tr('推定区間（詳細な経路データなし）', 'Inferred section (no detailed route data)')}</span>`);
   }
   if (state.filter.year == null) {
-    legendItems.push('<span class="legend-item legend-item-hint">全期間を表示中（年で絞り込みできます）</span>');
+    legendItems.push(`<span class="legend-item legend-item-hint">${tr('全期間を表示中（年で絞り込みできます）', 'Showing all time (you can filter by year)')}</span>`);
   }
   if (visibleSegments.length === 0) {
-    legendItems.push('<span class="legend-item legend-item-hint">すべての交通手段が非表示になっています</span>');
+    legendItems.push(`<span class="legend-item legend-item-hint">${tr('すべての交通手段が非表示になっています', 'All travel modes are hidden')}</span>`);
   }
   el.routeLegend.innerHTML = legendItems.join('');
 
@@ -100,11 +101,12 @@ let dayGalleryCancel = null; // cancels in-flight thumbnail fetches of the day's
 const DAY_STOP_PANE = 'dayStopPane'; // above the photo pane (640), so numbered stops stay on top
 
 function formatKm(meters) {
-  return (meters / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 1 }) + ' km';
+  return (meters / 1000).toLocaleString(numberLocale(), { maximumFractionDigits: 1 }) + ' km';
 }
 
 function formatDateTitle(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
+  if (tr('ja', 'en') === 'en') return d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
   const dow = '日月火水木金土'[d.getDay()];
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${dow}）`;
 }
@@ -134,7 +136,7 @@ function datesWithData(displayData) {
 function placeNameFor(visit) {
   const muni = municipalityName(state.municipalityByCode, visit.muniCode);
   const entry = visit.clusterId != null ? state.placeLabelCache.get(visit.clusterId) : null;
-  return entry && entry.status === 'done' && entry.label ? `${entry.label}（${muni}）` : muni;
+  return entry && entry.status === 'done' && entry.label ? entry.label + tr('（{m}）', ' ({m})', { m: muni }) : muni;
 }
 
 // Queue detail-name lookups (same queue/cache as the prefecture ranking) for
@@ -197,14 +199,14 @@ function renderLegend(segments, moves) {
     return `<li class="legend-item">${lineSampleSvg(m)}<span>${escapeHtml(modeLabel(m))}${dist ? ` <span class="legend-sub">${formatKm(dist)}</span>` : ''}</span></li>`;
   });
   if (segments.some((s) => s.inferred)) {
-    items.push(`<li class="legend-item">${lineSampleSvg('UNKNOWN', { inferred: true })}<span>推定区間（詳細な経路データなし）</span></li>`);
+    items.push(`<li class="legend-item">${lineSampleSvg('UNKNOWN', { inferred: true })}<span>${tr('推定区間（詳細な経路データなし）', 'Inferred section (no detailed route data)')}</span></li>`);
   }
   if (dayPhotosVisible && dayView.photos.length > 0) {
-    items.push(`<li class="legend-item"><span aria-hidden="true">&#128247;</span><span>写真（${dayView.photos.length}枚）</span></li>`);
+    items.push(`<li class="legend-item"><span aria-hidden="true">&#128247;</span><span>${tr('写真（{n}枚）', 'Photos ({n})', { n: dayView.photos.length })}</span></li>`);
   }
   if (dayView.stopMarkers.length > 0) {
     items.push(
-      `<li class="legend-item"><span class="day-stop legend-stop" style="background:${STOP_FILL};color:${STOP_TEXT}" aria-hidden="true">1</span><span>滞在地点（数字は訪問順）</span></li>`
+      `<li class="legend-item"><span class="day-stop legend-stop" style="background:${STOP_FILL};color:${STOP_TEXT}" aria-hidden="true">1</span><span>${tr('滞在地点（数字は訪問順）', 'Stay points (numbered in visit order)')}</span></li>`
     );
   }
   el.dayViewLegend.innerHTML = items.join('');
@@ -213,7 +215,7 @@ function renderLegend(segments, moves) {
 function renderTimelineList() {
   const { items } = dayView;
   if (items.length === 0) {
-    el.dayViewTimeline.innerHTML = '<li class="empty-note">この日の記録はありません。</li>';
+    el.dayViewTimeline.innerHTML = `<li class="empty-note">${tr('この日の記録はありません。', 'No records for this day.')}</li>`;
     return;
   }
   el.dayViewTimeline.innerHTML = items
@@ -225,8 +227,8 @@ function renderTimelineList() {
           `<span class="day-stop" style="background:${STOP_FILL};color:${STOP_TEXT}" aria-hidden="true">${item.number}</span>` +
           `<span class="day-tl-body"><span class="day-tl-time">${formatClock(v.startEpoch)}–${formatClock(v.endEpoch)}</span>` +
           `<span class="day-tl-title" data-cluster-id="${v.clusterId ?? ''}">${escapeHtml(placeNameFor(v))}</span>` +
-          `<span class="day-tl-sub">滞在 ${formatDuration(dwellMs(v))}</span>` +
-          `<span class="visually-hidden">（地図上の${item.number}番の地点）</span></span>` +
+          `<span class="day-tl-sub">${tr('滞在 {d}', 'Stayed {d}', { d: formatDuration(dwellMs(v)) })}</span>` +
+          `<span class="visually-hidden">${tr('（地図上の{n}番の地点）', ' (point {n} on the map)', { n: item.number })}</span></span>` +
           `</button></li>`
         );
       }
@@ -234,14 +236,14 @@ function renderTimelineList() {
       const dur = a.endEpoch != null ? a.endEpoch - a.startEpoch : 0;
       // A cut side's time is where the visible part of the route begins/ends,
       // not when the move itself started/ended — marked 「頃」.
-      const time = `${formatClock(a.startEpoch)}${a.startCut ? '頃' : ''}–${formatClock(a.endEpoch)}${a.endCut ? '頃' : ''}`;
+      const time = `${formatClock(a.startEpoch)}${a.startCut ? tr('頃', '~') : ''}–${formatClock(a.endEpoch)}${a.endCut ? tr('頃', '~') : ''}`;
       return (
         `<li><button type="button" class="day-tl-item day-tl-move" data-index="${i}">` +
         `<span class="day-tl-line">${lineSampleSvg(a.mode)}</span>` +
         `<span class="day-tl-body"><span class="day-tl-time">${time}</span>` +
-        `<span class="day-tl-title">${escapeHtml(modeLabel(a.mode))}で移動</span>` +
-        `<span class="day-tl-sub">${a.distanceMeters ? formatKm(a.distanceMeters) + '・' : ''}${formatDuration(dur)}</span>` +
-        (a.partial ? '<span class="day-tl-note">除外ゾーン外の部分のみ</span>' : '') +
+        `<span class="day-tl-title">${tr('{mode}で移動', 'By {mode}', { mode: escapeHtml(modeLabel(a.mode)) })}</span>` +
+        `<span class="day-tl-sub">${a.distanceMeters ? formatKm(a.distanceMeters) + tr('・', ' · ') : ''}${formatDuration(dur)}</span>` +
+        (a.partial ? `<span class="day-tl-note">${tr('除外ゾーン外の部分のみ', 'Only the part outside exclusion zones')}</span>` : '') +
         `</span></button></li>`
       );
     })
@@ -309,7 +311,7 @@ function renderDayPhotos() {
   el.btnDayViewPhotos.hidden = photos.length === 0;
   el.dayViewPhotoCount.textContent = photos.length ? String(photos.length) : '';
   el.btnDayViewPhotos.setAttribute('aria-pressed', String(dayPhotosVisible));
-  el.btnDayViewPhotos.setAttribute('aria-label', `この日の写真（${photos.length}枚）を${dayPhotosVisible ? '非表示にする' : '表示する'}`);
+  el.btnDayViewPhotos.setAttribute('aria-label', dayPhotosVisible ? tr('この日の写真（{n}枚）を非表示にする', 'Hide this day\'s photos ({n})', { n: photos.length }) : tr('この日の写真（{n}枚）を表示する', 'Show this day\'s photos ({n})', { n: photos.length }));
   el.btnDayViewPhotos.classList.toggle('active', dayPhotosVisible);
 
   const show = dayPhotosVisible && photos.length > 0;
@@ -323,7 +325,7 @@ function renderDayPhotos() {
   const shown = photos.slice(0, MAX_GALLERY_PHOTOS);
   el.dayViewPhotoGallery.innerHTML =
     galleryHtml(shown, shown.length) +
-    (photos.length > shown.length ? `<p class="empty-note">ほか${photos.length - shown.length}枚は地図上の写真ピンから表示できます。</p>` : '');
+    (photos.length > shown.length ? `<p class="empty-note">${tr('ほか{n}枚は地図上の写真ピンから表示できます。', '{n} more can be opened from the photo pins on the map.', { n: photos.length - shown.length })}</p>` : '');
   dayGalleryCancel = loadGalleryThumbnails(el.dayViewPhotoGallery, shown, { onOpenLightbox: openPhotoLightbox });
 }
 
@@ -331,9 +333,9 @@ function renderSummary({ moves, visits }) {
   const totalDist = moves.reduce((s, a) => s + (a.distanceMeters || 0), 0);
   const moveMs = moves.reduce((s, a) => s + (a.endEpoch != null ? Math.max(0, a.endEpoch - a.startEpoch) : 0), 0);
   const parts = [];
-  if (moves.length) parts.push(`移動 ${formatKm(totalDist)}`, `移動時間 ${formatDuration(moveMs)}`);
-  if (visits.length) parts.push(`滞在 ${visits.length}か所`);
-  el.dayViewSummary.textContent = parts.join(' ・ ');
+  if (moves.length) parts.push(tr('移動 {d}', 'Traveled {d}', { d: formatKm(totalDist) }), tr('移動時間 {t}', 'Travel time {t}', { t: formatDuration(moveMs) }));
+  if (visits.length) parts.push(tr('滞在 {n}か所', '{n} stops', { n: visits.length }));
+  el.dayViewSummary.textContent = parts.join(tr(' ・ ', ' · '));
 }
 
 function renderDay(dateStr) {
@@ -343,7 +345,7 @@ function renderDay(dateStr) {
   const timeline = buildTimeline(dateStr, displayData, segments);
   dayView = { ...dayView, dateStr, dates, segments, segLayers: [], stopMarkers: [], items: timeline.items, moves: timeline.moves, photos: photosForDay(dateStr) };
 
-  el.dayViewTitle.textContent = `${formatDateTitle(dateStr)}の経路`;
+  el.dayViewTitle.textContent = tr('{date}の経路', 'Route for {date}', { date: formatDateTitle(dateStr) });
   const i = dates.indexOf(dateStr);
   el.btnDayViewPrev.disabled = i <= 0;
   el.btnDayViewNext.disabled = i === -1 || i >= dates.length - 1;
@@ -354,7 +356,7 @@ function renderDay(dateStr) {
 
   if (segments.length === 0 && timeline.visits.length === 0) {
     el.dayViewMessage.hidden = false;
-    el.dayViewMessage.textContent = 'この日の詳細な経路データはありません。';
+    el.dayViewMessage.textContent = tr('この日の詳細な経路データはありません。', 'No detailed route data for this day.');
     renderTimelineList();
     renderDayPhotos();
     renderLegend(segments, timeline.moves);
@@ -377,7 +379,7 @@ function renderDay(dateStr) {
       pane: DAY_STOP_PANE,
     });
     marker.bindTooltip(
-      () => `${n}. ${escapeHtml(placeNameFor(v))}<br>${formatClock(v.startEpoch)}–${formatClock(v.endEpoch)}（滞在 ${formatDuration(dwellMs(v))}）`,
+      () => `${n}. ${escapeHtml(placeNameFor(v))}<br>${formatClock(v.startEpoch)}–${formatClock(v.endEpoch)}${tr('（滞在 {d}）', ' (stayed {d})', { d: formatDuration(dwellMs(v)) })}`,
       { direction: 'top', offset: [0, -12] }
     );
     marker.on('click', () => {

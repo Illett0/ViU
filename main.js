@@ -32,6 +32,39 @@ let mainWindow;
 // the renderer alone. Defaults to ON, same as the renderer's own default.
 let privacyModeEnabled = true;
 let prefectureGeoJSONCache = null;
+
+// UI language (issue #22): 'ja' or 'en'. An explicit choice from the
+// settings screen is persisted in userData/settings.json; until then it
+// follows the OS language (Japanese OS -> 'ja', anything else -> 'en').
+// PATHBROWSER_TEST_LANG pins it for E2E runs, so the suite doesn't depend on
+// the machine's locale.
+const SUPPORTED_LANGUAGES = ['ja', 'en'];
+let currentLanguage = 'ja';
+
+function settingsPath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function readSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
+  } catch {
+    return {};
+  }
+}
+
+function resolveLanguage() {
+  const forced = process.env.PATHBROWSER_TEST_LANG;
+  if (SUPPORTED_LANGUAGES.includes(forced)) return forced;
+  const saved = readSettings().language;
+  if (SUPPORTED_LANGUAGES.includes(saved)) return saved;
+  return app.getLocale().toLowerCase().startsWith('ja') ? 'ja' : 'en';
+}
+
+// Picks the main-process string (native dialogs) for the current language.
+function tr(ja, en) {
+  return currentLanguage === 'en' ? en : ja;
+}
 let municipalityGeoJSONCache = null;
 
 // A launch right after installing/updating (see build/installer.nsh) should
@@ -110,6 +143,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  currentLanguage = resolveLanguage();
   createWindow();
 
   app.on('activate', () => {
@@ -123,6 +157,16 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('app:get-version', async () => {
   return app.getVersion();
+});
+
+ipcMain.handle('app:get-language', async () => currentLanguage);
+
+ipcMain.handle('app:set-language', async (event, language) => {
+  if (!SUPPORTED_LANGUAGES.includes(language)) return currentLanguage;
+  currentLanguage = language;
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(settingsPath(), JSON.stringify({ ...readSettings(), language }, null, 2));
+  return currentLanguage;
 });
 
 ipcMain.handle('timeline:get-prefecture-geojson', async () => {
@@ -157,7 +201,7 @@ ipcMain.handle('timeline:choose-file', async () => {
   if (process.env.PATHBROWSER_TEST_FILE) return process.env.PATHBROWSER_TEST_FILE;
 
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Googleタイムラインのエクスポートファイルを選択',
+    title: tr('Googleタイムラインのエクスポートファイルを選択', 'Select a Google Timeline export file'),
     filters: [{ name: 'JSON', extensions: ['json'] }],
     properties: ['openFile'],
   });
@@ -276,6 +320,7 @@ const USER_DATA_ENTRIES = [
   'recent-files.json',
   'timeline-backups',
   'exclusion-zones.json',
+  'settings.json',
 ];
 
 ipcMain.handle('data:delete-all', async () => {
@@ -285,13 +330,15 @@ ipcMain.handle('data:delete-all', async () => {
     ? { response: 0 }
     : await dialog.showMessageBox(mainWindow, {
         type: 'warning',
-        buttons: ['すべて削除する', 'キャンセル'],
+        buttons: [tr('すべて削除する', 'Delete everything'), tr('キャンセル', 'Cancel')],
         defaultId: 1,
         cancelId: 1,
-        title: 'すべてのデータを削除',
-        message: 'ViUが保存したデータをすべて削除しますか？',
-        detail:
+        title: tr('すべてのデータを削除', 'Delete all data'),
+        message: tr('ViUが保存したデータをすべて削除しますか？', 'Delete all data saved by ViU?'),
+        detail: tr(
           '最近使ったファイルの履歴とアプリ内バックアップ（タイムラインのコピー）、除外ゾーン、写真フォルダの連携設定、各種キャッシュが削除されます。元のタイムラインファイルや写真そのものは削除されません。この操作は取り消せません。',
+          'This deletes the recent-files history and in-app backups (copies of your timeline), exclusion zones, the linked photo folder setting, and all caches. Your original timeline file and photos are not deleted. This cannot be undone.'
+        ),
       });
   if (response !== 0) return { deleted: false };
 
@@ -315,7 +362,7 @@ ipcMain.handle('photos:choose-folder', async () => {
   if (process.env.PATHBROWSER_TEST_PHOTO_FOLDER) return process.env.PATHBROWSER_TEST_PHOTO_FOLDER;
 
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: '写真フォルダを選択',
+    title: tr('写真フォルダを選択', 'Select a photo folder'),
     properties: ['openDirectory'],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
@@ -458,9 +505,9 @@ ipcMain.handle('timeline:export-png', async (event, rect) => {
   }
 
   const result = await dialog.showSaveDialog(mainWindow, {
-    title: '制覇マップをPNGで保存',
+    title: tr('制覇マップをPNGで保存', 'Save the coverage map as PNG'),
     defaultPath: 'viu-map.png',
-    filters: [{ name: 'PNG画像', extensions: ['png'] }],
+    filters: [{ name: tr('PNG画像', 'PNG image'), extensions: ['png'] }],
   });
   if (result.canceled || !result.filePath) return null;
   fs.writeFileSync(result.filePath, image.toPNG());

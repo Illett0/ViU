@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('pathBrowser', {
   clearCache: () => ipcRenderer.invoke('cache:clear'),
   deleteAllData: () => ipcRenderer.invoke('data:delete-all'),
   setPrivacyMode: (enabled) => ipcRenderer.invoke('app:set-privacy-mode', enabled),
+  getLanguage: () => ipcRenderer.invoke('app:get-language'),
+  setLanguage: (language) => ipcRenderer.invoke('app:set-language', language),
   choosePhotoFolder: () => ipcRenderer.invoke('photos:choose-folder'),
   getLinkedPhotoFolder: () => ipcRenderer.invoke('photos:get-linked-folder'),
   scanPhotoFolder: (folder) => ipcRenderer.invoke('photos:scan-folder', folder),

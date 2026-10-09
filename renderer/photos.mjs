@@ -5,6 +5,7 @@ import { isInAnyZone, distanceMeters, municipalityName, estimatePhotoLocations }
 import { el, state } from './context.mjs';
 import { populateYearOptions } from './loading.mjs';
 import { render } from './app.mjs';
+import { tr } from './i18n.mjs';
 
 export function resolvePlaceName(lat, lng) {
   if (!state.muniGeoJSON) return null;
@@ -70,7 +71,7 @@ export function openPhotoLightbox(dataUrl, photo) {
   el.photoLightboxImg.src = dataUrl;
   const name = photo.filePath.split(/[\\/]/).pop();
   const place = resolvePlaceName(photo.lat, photo.lng);
-  const estimatedTag = photo.source === 'estimated' ? '（位置は推定）' : null;
+  const estimatedTag = photo.source === 'estimated' ? tr('（位置は推定）', ' (estimated location)') : null;
   el.photoLightboxCaption.textContent = [name, place, estimatedTag].filter(Boolean).join(' — ');
   el.photoLightboxOverlay.hidden = false;
   el.btnPhotoLightboxClose.focus();
@@ -97,8 +98,9 @@ export function togglePhotoLayer() {
 
 export function formatPhotoScanSummary(summary, estimatedCount) {
   if (!summary) return '';
-  const base = `${summary.total}枚中 ${summary.withLocation}枚に位置情報が見つかりました（Exif ${summary.withLocationExif} / Takeout ${summary.withLocationTakeout}）`;
-  return estimatedCount > 0 ? `${base}。さらに${estimatedCount}枚をタイムラインの記録から推定しました` : base;
+  const params = { total: summary.total, found: summary.withLocation, exif: summary.withLocationExif, takeout: summary.withLocationTakeout, est: estimatedCount };
+  const base = tr('{total}枚中 {found}枚に位置情報が見つかりました（Exif {exif} / Takeout {takeout}）', 'Found locations for {found} of {total} photos (Exif {exif} / Takeout {takeout})', params);
+  return estimatedCount > 0 ? base + tr('。さらに{est}枚をタイムラインの記録から推定しました', '. Estimated {est} more from your timeline records', params) : base;
 }
 
 // Stage3: (re-)derives state.photos from state.rawPhotos, filling in a
@@ -119,19 +121,19 @@ export async function startPhotoScan(folder) {
   el.btnRescanPhotoFolder.disabled = true;
   el.photoScanProgress.hidden = false;
   el.photoScanProgressFill.style.width = '0%';
-  el.photoScanSummary.textContent = 'スキャン中...';
+  el.photoScanSummary.textContent = tr('スキャン中...', 'Scanning...');
 
   const unsubscribe = window.pathBrowser.onPhotoScanProgress((payload) => {
     if (payload.phase === 'listing') {
       // Total is unknown until the recursive folder walk finishes, so there's
       // no meaningful percentage yet — just show how many photos were found.
       el.photoScanProgressFill.style.width = '0%';
-      el.photoScanSummary.textContent = `フォルダを検索中... (${payload.current}件のファイルを検出)`;
+      el.photoScanSummary.textContent = tr('フォルダを検索中... ({n}件のファイルを検出)', 'Searching the folder... ({n} files found)', { n: payload.current });
       return;
     }
     const pct = payload.total > 0 ? Math.round((payload.current / payload.total) * 100) : 0;
     el.photoScanProgressFill.style.width = pct + '%';
-    el.photoScanSummary.textContent = `スキャン中... (${payload.current}/${payload.total})`;
+    el.photoScanSummary.textContent = tr('スキャン中... ({c}/{t})', 'Scanning... ({c}/{t})', { c: payload.current, t: payload.total });
   });
 
   try {
@@ -147,10 +149,11 @@ export async function startPhotoScan(folder) {
     if (state.raw) populateYearOptions();
     const estimatedCount = state.photos.filter((p) => p.source === 'estimated').length;
     el.photoLinkedFolder.textContent = folder;
+    delete el.photoLinkedFolder.dataset.unlinked;
     el.photoScanSummary.textContent = formatPhotoScanSummary(result.summary, estimatedCount);
     el.btnRescanPhotoFolder.hidden = false;
   } catch (err) {
-    el.photoScanSummary.textContent = `スキャンに失敗しました: ${err && err.message ? err.message : err}`;
+    el.photoScanSummary.textContent = tr('スキャンに失敗しました: ', 'Scan failed: ') + (err && err.message ? err.message : err);
   } finally {
     unsubscribe();
     el.photoScanProgress.hidden = true;
@@ -164,10 +167,22 @@ export async function startPhotoScan(folder) {
 // re-scan it (cheap — unchanged files are skipped via the on-disk cache, see
 // worker/photoScanWorker.js) so photos are already available the moment the
 // user toggles the layer on, without an extra manual "re-scan" click.
+// The "not linked" placeholder is the only text in that slot that's ours
+// rather than a folder path, so it's flagged for re-translation on a
+// language switch (see settings.mjs).
+export function showUnlinkedPhotoFolder() {
+  el.photoLinkedFolder.textContent = tr('未連携', 'Not linked');
+  el.photoLinkedFolder.dataset.unlinked = '1';
+}
+
 export async function initPhotoLink() {
   const folder = await window.pathBrowser.getLinkedPhotoFolder();
-  if (!folder) return;
+  if (!folder) {
+    showUnlinkedPhotoFolder();
+    return;
+  }
   el.photoLinkedFolder.textContent = folder;
+  delete el.photoLinkedFolder.dataset.unlinked;
   el.btnRescanPhotoFolder.hidden = false;
   await startPhotoScan(folder);
 }

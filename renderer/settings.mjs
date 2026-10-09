@@ -5,7 +5,8 @@ import { initZoneMap, renderZoneCircles, renderPendingCircle, renderZoneList, re
 import { applyPrivacy, applyExclusionZones, isInAnyZone, distanceMeters, municipalityName, computeClusterRanking } from './aggregate.mjs';
 import { el, state, ui, zoneLayerRef, zonePendingLayerRef } from './context.mjs';
 import { stopTimelapse } from './timelapse.mjs';
-import { render } from './app.mjs';
+import { render, switchLanguage } from './app.mjs';
+import { getLanguage, tr } from './i18n.mjs';
 
 // Exact point-in-polygon lookup, falling back to nearest-centroid only for
 // the rare point that misses every polygon (e.g. a coastline simplification gap).
@@ -44,7 +45,9 @@ export function computeSuggestions() {
     const name = municipalityName(state.municipalityByCode, nearestMunicipalityCode(p.lat, p.lng));
     suggestions.push({
       key,
-      text: `${p.label === 'HOME' ? '自宅' : '職場'}と推定される地点（${name}）を除外ゾーンに登録しますか？（半径300m）`,
+      text: p.label === 'HOME'
+        ? tr('自宅と推定される地点（{name}）を除外ゾーンに登録しますか？（半径300m）', 'Add the place estimated to be your home ({name}) as an exclusion zone? (300m radius)', { name })
+        : tr('職場と推定される地点（{name}）を除外ゾーンに登録しますか？（半径300m）', 'Add the place estimated to be your workplace ({name}) as an exclusion zone? (300m radius)', { name }),
       lat: p.lat,
       lng: p.lng,
       radiusMeters: 300,
@@ -63,7 +66,11 @@ export function computeSuggestions() {
     if (state.dismissedSuggestions.has(key)) return;
     suggestions.push({
       key,
-      text: `よく訪れる地点（訪問回数 ${i + 1}位、${row.muniName}、${row.count}回）を除外ゾーンに登録しますか？自宅・職場など人に見られたくない場所の可能性がある場合にご利用ください（半径300m）`,
+      text: tr(
+        'よく訪れる地点（訪問回数 {rank}位、{muni}、{count}回）を除外ゾーンに登録しますか？自宅・職場など人に見られたくない場所の可能性がある場合にご利用ください（半径300m）',
+        'Add a frequently visited place (#{rank} by visits, {muni}, {count} visits) as an exclusion zone? Use this if it may be somewhere you don\'t want others to see, such as your home or workplace (300m radius)',
+        { rank: i + 1, muni: row.muniName, count: row.count }
+      ),
       lat: row.lat,
       lng: row.lng,
       radiusMeters: 300,
@@ -113,7 +120,7 @@ export function renderSettingsScreen() {
 
   if (state.raw) {
     const withZones = applyExclusionZones(applyPrivacy(state.raw, state.privacy), state.zones);
-    el.zoneHiddenCount.textContent = `非表示: ${withZones.excludedVisitCount} 件`;
+    el.zoneHiddenCount.textContent = tr('非表示: {n} 件', 'Hidden: {n}', { n: withZones.excludedVisitCount });
   } else {
     el.zoneHiddenCount.textContent = '';
   }
@@ -157,18 +164,27 @@ export function wireSettings() {
   // passed straight through wouldn't crash (it just has no `.fromImport`
   // property, silently yielding the correct `false` by luck) but that's
   // fragile; wrapping makes the omission explicit rather than accidental.
+  const languageSelect = document.getElementById('language-select');
+  languageSelect.value = getLanguage();
+  languageSelect.addEventListener('change', () => switchLanguage(languageSelect.value));
+
   el.btnSettings.addEventListener('click', () => openSettings());
   el.btnSettingsClose.addEventListener('click', closeSettings);
   el.btnSettingsGotoMap.addEventListener('click', closeSettings);
 
   el.btnClearCache.addEventListener('click', async () => {
-    const proceed = confirm('市区町村判定・クラスタリング結果、地名取得結果、写真のサムネイルのキャッシュを削除します。次回ファイルを開いたときに再計算されます（除外ゾーンや最近使ったファイルの履歴は削除されません）。続けますか？');
+    const proceed = confirm(
+      tr(
+        '市区町村判定・クラスタリング結果、地名取得結果、写真のサムネイルのキャッシュを削除します。次回ファイルを開いたときに再計算されます（除外ゾーンや最近使ったファイルの履歴は削除されません）。続けますか？',
+        'This deletes the cached municipality matching/clustering results, place names and photo thumbnails. They are recalculated the next time you open a file (exclusion zones and the recent-files history are kept). Continue?'
+      )
+    );
     if (!proceed) return;
     el.btnClearCache.disabled = true;
     try {
       const { geoCount, nominatimCount, thumbnailCount } = await window.pathBrowser.clearCache();
       el.cacheClearResult.hidden = false;
-      el.cacheClearResult.textContent = `キャッシュをクリアしました（判定結果 ${geoCount}件、地名 ${nominatimCount}件、サムネイル ${thumbnailCount}件）。`;
+      el.cacheClearResult.textContent = tr('キャッシュをクリアしました（判定結果 {geo}件、地名 {names}件、サムネイル {thumbs}件）。', 'Cache cleared ({geo} matching results, {names} place names, {thumbs} thumbnails).', { geo: geoCount, names: nominatimCount, thumbs: thumbnailCount });
     } finally {
       el.btnClearCache.disabled = false;
     }
