@@ -127,11 +127,23 @@
           <button id="btn-timelapse-reset" class="btn btn-icon" title="リセット" data-en-title="Reset">&#8634;</button>
           <button id="btn-export-png" class="btn btn-icon" title="PNGとして保存" data-en-title="Save as PNG">&#128190;</button>
           <button id="btn-photo-toggle" class="btn btn-icon" title="写真レイヤー" data-en-title="Photo layer">&#128247;</button>
+          <button id="btn-compare" class="btn btn-icon" title="2つの期間を並べて比較" data-en-title="Compare two periods side by side" aria-pressed="false">&#8644;</button>
         </div>
+        <div id="map-period-badge" class="badge compare-period-badge" hidden></div>
         <div id="timelapse-overlay" class="timelapse-overlay" hidden>
           <div id="timelapse-period" class="timelapse-period"></div>
           <div id="timelapse-count" class="timelapse-count"></div>
         </div>
+      </div>
+      <div id="compare-panel" class="compare-panel" hidden>
+        <div id="compare-map"></div>
+        <div class="badge compare-period-badge compare-controls">
+          <label><span data-en="Compare with">比較する期間</span>
+            <select id="compare-year" aria-label="比較する年" data-en-aria-label="Year to compare"></select>
+            <select id="compare-month" aria-label="比較する月" data-en-aria-label="Month to compare"></select>
+          </label>
+        </div>
+        <div id="compare-count-badge" class="badge compare-count-badge"></div>
       </div>
       <aside id="detail-panel">
         <div id="detail-panel-content"></div>

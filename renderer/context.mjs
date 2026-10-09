@@ -14,6 +14,7 @@ state.renderGen = 0;
 state.granularity = 'prefecture';
 state.zones = [];
 state.bookmarks = []; // issue #35, see bookmarks.mjs
+state.compare = { on: false, touched: false, filter: { year: null, month: null } }; // issue #38, see compareView.mjs
 state.sortBy = 'count';
 state.chronologyIncludeMuni = false;
 state.dismissedSuggestions = new Set();
@@ -48,6 +49,13 @@ export const el = {
   chronologyScreen: document.getElementById('chronology-screen'),
   chronologyContent: document.getElementById('chronology-content'),
   calendarSection: document.getElementById('calendar-section'),
+  btnCompare: document.getElementById('btn-compare'),
+  comparePanel: document.getElementById('compare-panel'),
+  compareMapDiv: document.getElementById('compare-map'),
+  compareYear: document.getElementById('compare-year'),
+  compareMonth: document.getElementById('compare-month'),
+  compareCountBadge: document.getElementById('compare-count-badge'),
+  mapPeriodBadge: document.getElementById('map-period-badge'),
   chronologyIncludeMuni: document.getElementById('chronology-include-muni'),
   statsScreen: document.getElementById('stats-screen'),
   statsContent: document.getElementById('stats-content'),

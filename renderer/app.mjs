@@ -14,6 +14,7 @@ import { initPhotoLink, showUnlinkedPhotoFolder, wirePhotos } from './photos.mjs
 import { renderBreadcrumb, renderMapTab } from './mapTab.mjs';
 import { dayRecordCounts, openDayView, renderRouteTab, wireRouteTab } from './routeTab.mjs';
 import { renderCalendar } from './calendarView.mjs';
+import { refreshComparePeriodOptions, renderCompare, wireCompare } from './compareView.mjs';
 import { stopTimelapse, wireTimelapse } from './timelapse.mjs';
 import { renderSettingsScreen, wireSettings } from './settings.mjs';
 import { installTestHooks } from './testHooks.mjs';
@@ -22,7 +23,9 @@ import { initBookmarks, updateBookmarkButton, wireBookmarks } from './bookmarks.
 import { updateAddressBar, wireAddressBar } from './addressBar.mjs';
 import { applyStaticTranslations, setLanguage, tr } from './i18n.mjs';
 
-export function getDerived() {
+// `filter` defaults to the header's period; the comparison map (issue #38)
+// asks for another one.
+export function getDerived({ filter = state.filter } = {}) {
   const privacyData = applyPrivacy(state.raw, state.privacy);
   const globalAggregates = computePrefectureAggregates(privacyData, state.raw.prefectures);
   const globalMuniAggregates = computeMunicipalityAggregates(privacyData, state.raw.municipalities);
@@ -30,13 +33,13 @@ export function getDerived() {
   // During timelapse playback, the map should paint progressively rather than
   // flicker on/off per exact month, so we use a cumulative "up to this month"
   // filter instead of the normal exact-match period filter.
-  const periodData = state.timelapse.playing
-    ? filterUpToPeriod(privacyData, { year: state.filter.year, month: state.filter.month })
-    : filterByPeriod(privacyData, state.filter);
+  const periodData = state.timelapse.playing && filter === state.filter
+    ? filterUpToPeriod(privacyData, { year: filter.year, month: filter.month })
+    : filterByPeriod(privacyData, filter);
 
   const periodAggregates = computePrefectureAggregates(periodData, state.raw.prefectures);
   const muniAggregates = computeMunicipalityAggregates(periodData, state.raw.municipalities);
-  const newlyVisited = state.filter.year != null && !state.timelapse.playing ? computeNewlyVisitedInYear(globalAggregates, state.filter.year) : null;
+  const newlyVisited = filter.year != null && !state.timelapse.playing ? computeNewlyVisitedInYear(globalAggregates, filter.year) : null;
 
   // Exclusion zones only affect ranking/pins/visit-lists/route — never the
   // prefecture/municipality "visited" status or the overall stats, so this is
@@ -111,6 +114,7 @@ export function render() {
     el.prefBadge.innerHTML = `<span class="count-num">${visitedPrefCount}</span> / ${state.raw.prefectures.length} ${tr('県', 'prefectures')}`;
   }
 
+  renderCompare();
   if (state.tab === 'map') {
     renderMapTab(derived);
   } else if (state.tab === 'route') {
@@ -331,6 +335,7 @@ export async function switchLanguage(next) {
     populateYearOptions();
     el.filterYear.value = state.filter.year ?? '';
     el.filterMonth.value = state.filter.month ?? '';
+    refreshComparePeriodOptions();
   }
   if (el.photoLinkedFolder.dataset.unlinked) showUnlinkedPhotoFolder();
   updatePrivacyLabel();
@@ -359,6 +364,7 @@ wireSettings();
 wireHistoryMenu();
 wireBookmarks();
 wireAddressBar();
+wireCompare();
 installTestHooks();
 // Static markup is visible (and clickable) before this module graph has run;
 // style.css keeps #app hidden until here so nobody sees the untranslated page

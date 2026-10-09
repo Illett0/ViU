@@ -70,6 +70,14 @@ async function main() {
       assert.deepStrictEqual(await visibleJapanese(page), []);
     });
 
+    await step('compare mode is in English', async () => {
+      await page.click('#btn-compare');
+      await page.waitForSelector('#compare-panel:not([hidden])');
+      assert.deepStrictEqual(await visibleJapanese(page), []);
+      assert(/prefectures/.test(await page.textContent('#compare-count-badge')));
+      await page.click('#btn-compare');
+    });
+
     for (const tab of ['route', 'chronology', 'stats']) {
       await step(`${tab} tab has no untranslated text`, async () => {
         await openTab(page, tab);

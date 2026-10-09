@@ -4,6 +4,7 @@ import { computeConquestRates, isPassOnly, computeClusterRanking } from './aggre
 import { el, geojsonLayerRef, photoLayerRef, routePhotoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
 import { recluster } from './loading.mjs';
 import { getLabelQueueState } from './labels.mjs';
+import { getCompareLayerStyles } from './compareView.mjs';
 import { togglePhotoLayer } from './photos.mjs';
 import { resetTimelapse, startTimelapse, stopTimelapse } from './timelapse.mjs';
 import { closeSettings, openSettings, persistZones } from './settings.mjs';
@@ -123,6 +124,14 @@ export function installTestHooks() {
     setToday(dateStr) {
       ui.todayOverride = dateStr;
       render();
+    },
+    getCompareStyles: getCompareLayerStyles,
+    panCompareMap(dLat, dLng) {
+      const c = ui.compareMap.getCenter();
+      ui.compareMap.setView([c.lat + dLat, c.lng + dLng], ui.compareMap.getZoom(), { animate: false });
+    },
+    getCompareView() {
+      return ui.compareMap ? { center: ui.compareMap.getCenter(), zoom: ui.compareMap.getZoom() } : null;
     },
     getMaxZoom() {
       return ui.map ? ui.map.getMaxZoom() : null;

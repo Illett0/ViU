@@ -226,7 +226,8 @@ html, body {
   font-size: 13px;
   color: var(--color-text-dim);
 }
-.period-filter select {
+.period-filter select,
+.compare-controls select {
   background: var(--color-panel-alt);
   color: var(--color-text);
   border: 1px solid var(--color-border);
@@ -1361,3 +1362,12 @@ button.cal-day:hover, button.cal-day:focus-visible { outline: 2px solid var(--co
 .cal-day.lv2 { background: #6baed6; }
 .cal-day.lv3 { background: #3182bd; }
 .cal-day.lv4 { background: #08519c; }
+
+/* Side-by-side period comparison (issue #38). */
+.compare-panel { position: relative; flex: 1; min-width: 0; border-left: 2px solid var(--color-border); }
+#compare-map { width: 100%; height: 100%; background: #10131a; }
+/* .badge pins to the top-left; these sit bottom-left (zoom buttons are bottom-right). */
+.compare-period-badge { top: auto; bottom: 16px; left: 16px; z-index: 1000; font-size: 13px; }
+.compare-controls label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.compare-count-badge { z-index: 1000; }
+#btn-compare.active { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
