@@ -75,11 +75,51 @@ async function getView(page) {
   return page.evaluate(() => window.__pathBrowserTest.getView());
 }
 
+// Diagnostics for whichever app launchApp() started last: main-process
+// stdout/stderr and renderer console output, dumped together with the
+// visible page text when a step fails — on CI that's the only way to see
+// *why* a screen never appeared.
+const diag = { page: null, logs: [] };
+
+async function dumpDiagnostics() {
+  if (!diag.page) return;
+  try {
+    const text = await diag.page.evaluate(() => document.body.innerText);
+    console.error('\n--- visible page text ---\n' + text.slice(0, 3000));
+  } catch (err) {
+    console.error('\n(could not read page text: ' + err.message + ')');
+  }
+  console.error('--- app/console log (last 60 lines) ---\n' + diag.logs.slice(-60).join('\n'));
+}
+
+// The header must fit on one row at the app's default window size (main.js
+// creates it 1280px wide). A smaller screen — e.g. CI's macOS runner — shrinks
+// the window, and wrapping onto two rows there is the intended narrow-window
+// layout, so the check only applies when the window actually got its width.
+const DEFAULT_CONTENT_WIDTH = 1240;
+
+async function assertHeaderOneRow(page, message) {
+  const m = await page.evaluate(() => ({
+    width: window.innerWidth,
+    tops: ['.header-left', '#address-bar', '.header-right'].map((q) => Math.round(document.querySelector(q).getBoundingClientRect().top)),
+  }));
+  if (m.width < DEFAULT_CONTENT_WIDTH) {
+    console.log(`  (window is only ${m.width}px wide on this machine; skipping the one-row header check)`);
+    return;
+  }
+  assert(Math.max(...m.tops) - Math.min(...m.tops) < 10, `${message} (window ${m.width}px, tops: ${m.tops})`);
+}
+
 function createStepRunner() {
   const stepNames = [];
   async function step(name, fn) {
     process.stdout.write('- ' + name + ' ... ');
-    await fn();
+    try {
+      await fn();
+    } catch (err) {
+      await dumpDiagnostics();
+      throw err;
+    }
     stepNames.push(name);
     console.log('OK');
   }
@@ -98,11 +138,27 @@ async function launchApp(extraEnv = {}) {
       PATHBROWSER_TEST_FILE: FIXTURE_FILE,
       PATHBROWSER_TEST_PHOTO_FOLDER: PHOTO_FOLDER,
       PATHBROWSER_TEST_USERDATA: userDataDir,
+      // The suite's assertions read the Japanese UI; pin it regardless of the
+      // machine's OS language (a spec can override this via extraEnv).
+      PATHBROWSER_TEST_LANG: 'ja',
+      // Detail names come from a local stub, never the real Nominatim/Overpass
+      // (see main.js). A spec can raise the delay via extraEnv or app.evaluate.
+      PATHBROWSER_TEST_GEOCODE_STUB: '0',
       ...extraEnv,
     },
   });
   const page = await app.firstWindow();
-  await page.waitForSelector('#btn-open-file-main', { state: 'visible', timeout: 30000 });
+  diag.page = page;
+  diag.logs = [];
+  const proc = app.process();
+  for (const stream of [proc.stdout, proc.stderr]) {
+    if (stream) stream.on('data', (chunk) => diag.logs.push(...String(chunk).trimEnd().split('\n').map((l) => '[main] ' + l)));
+  }
+  page.on('console', (msg) => diag.logs.push(`[renderer ${msg.type()}] ${msg.text()}`));
+  page.on('pageerror', (err) => diag.logs.push('[renderer pageerror] ' + (err.stack || err)));
+  // data-ready is set once the renderer has translated and wired the page —
+  // the static buttons exist (and look clickable) before that.
+  await page.waitForSelector('html[data-ready] #btn-open-file-main', { state: 'visible', timeout: 30000 });
 
   // Nice-to-have (issue #25): keep the real Electron window from visibly
   // popping up on screen during the run. Best-effort — not fatal if it
@@ -137,10 +193,9 @@ async function completeOnboarding(page, step) {
   await step('link the fixture photo folder and wait for the scan to finish', async () => {
     await page.click('#btn-link-photo-folder');
     await page.waitForFunction(
-      () => {
-        const el = document.getElementById('photo-scan-summary');
-        return !!(el && el.textContent && el.textContent.includes('枚中'));
-      },
+      // Language-independent: the rescan button is revealed only once a scan
+      // has succeeded, and the link button is re-enabled when it finishes.
+      () => !document.getElementById('btn-rescan-photo-folder').hidden && !document.getElementById('btn-link-photo-folder').disabled,
       { timeout: 30000 }
     );
   });
@@ -173,6 +228,7 @@ module.exports = {
   latLngToPoint,
   getView,
   createStepRunner,
+  assertHeaderOneRow,
   launchApp,
   completeOnboarding,
 };

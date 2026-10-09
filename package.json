@@ -1,6 +1,6 @@
 {
   "name": "viu",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "Googleタイムライン位置履歴から都道府県制覇マップ・移動統計を可視化するデスクトップアプリ",
   "main": "main.js",
   "author": "_Illett_",
@@ -12,10 +12,12 @@
     "start": "electron .",
     "fetch:boundaries": "node scripts/fetch-municipality-boundaries.js",
     "dist": "electron-builder",
-    "test:e2e": "node test/e2e/run-all.js"
+    "test:e2e": "node test/e2e/run-all.js",
+    "setup": "allow-scripts"
   },
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
+    "@lavamoat/allow-scripts": "5.1.0",
     "electron": "^43.0.0",
     "electron-builder": "^26.0.0",
     "playwright": "^1.61.1"
@@ -32,7 +34,11 @@
     "appId": "dev.illett.viu",
     "productName": "ViU",
     "compression": "maximum",
-    "electronLanguages": ["ja", "en-US"],
+    "electronLanguages": [
+      "ja",
+      "en",
+      "en-US"
+    ],
     "directories": {
       "output": "dist"
     },
@@ -58,7 +64,28 @@
         }
       ]
     },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.travel",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "target": [
+        "AppImage"
+      ]
+    },
     "nsis": {
+      "include": "build/installer.nsh",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
@@ -68,7 +95,9 @@
       "menuCategory": false
     }
   },
-  "allowScripts": {
-    "electron-winstaller@5.4.0": true
+  "lavamoat": {
+    "allowScripts": {
+      "electron-builder>app-builder-lib>electron-builder-squirrel-windows>electron-winstaller#5.4.0": true
+    }
   }
 }

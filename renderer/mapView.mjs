@@ -1,7 +1,8 @@
 // Leaflet-based map rendering: national heatmap choropleth (prefecture or
 // municipality granularity) + prefecture drill-down.
 
-import { formatPlaceLabel } from './aggregate.mjs';
+import { formatPlaceLabel, escapeHtml, isPassOnly } from './aggregate.mjs';
+import { tr } from './i18n.mjs';
 
 // Single-hue sequential blue for the choropleth (visit-count intensity), kept
 // deliberately far in hue from the orange pins/markers below so pins never
@@ -10,7 +11,10 @@ import { formatPlaceLabel } from './aggregate.mjs';
 const UNVISITED_COLOR = '#e0e0e0';
 const HEAT_LOW = [222, 235, 247]; // #deebf7
 const HEAT_HIGH = [8, 81, 156]; // #08519c
-const PATH_ONLY_COLOR = '#deebf7'; // lightest tier: "passed through, never stayed"
+// "Passed through, never stayed" — a separate pale teal rather than the
+// lightest blue heat tier (which it used to share, #deebf7), so 通過のみ
+// reads as clearly distinct from 訪問1件 at a glance.
+const PATH_ONLY_COLOR = '#b9e2da';
 
 const DEFAULT_BORDER_COLOR = '#151820';
 const SELECTED_BORDER_COLOR = '#ff7f0e';
@@ -47,6 +51,7 @@ function maxPlaceCount(aggregates) {
 }
 
 function fillColorFor(entry, max) {
+  if (isPassOnly(entry)) return PATH_ONLY_COLOR;
   const visited = entry && (entry.stayCount > 0 || entry.firstEpoch != null);
   if (!visited) return UNVISITED_COLOR;
   if (entry.placeCount > 0 && max > 0) {
@@ -56,13 +61,31 @@ function fillColorFor(entry, max) {
   return PATH_ONLY_COLOR;
 }
 
+function tooltipSuffix(entry) {
+  if (!entry) return tr('訪問地点 0 件', '0 places visited');
+  if (isPassOnly(entry)) return tr('通過のみ', 'passed through only');
+  if (entry.placeCount === 0 && entry.firstEpoch != null) return tr('通過のみ', 'passed through only');
+  return tr('訪問地点 {n} 件', '{n} places visited', { n: entry.placeCount });
+}
+
+// Every map in the app puts its +/- buttons bottom-right (above the OSM
+// attribution) instead of Leaflet's default top-left, which collided with the
+// count badge / 離島 badge overlays that live in that corner. Japanese
+// labels double as the buttons' accessible names.
+export function addZoomControl(map) {
+  L.control.zoom({ position: 'bottomright', zoomInTitle: tr('拡大', 'Zoom in'), zoomOutTitle: tr('縮小', 'Zoom out') }).addTo(map);
+  return map;
+}
+
 export function initMap(containerEl) {
   const map = L.map(containerEl, {
     center: [36.5, 138],
     zoom: 5,
     minZoom: 4,
     worldCopyJump: false,
+    zoomControl: false,
   });
+  addZoomControl(map);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
@@ -132,9 +155,8 @@ export function renderNational(map, geojsonLayerRef, geojson, aggregates, onClic
     },
     onEachFeature: (feature, lyr) => {
       const entry = aggregates.get(feature.properties.code);
-      const placeCount = entry ? entry.placeCount : 0;
       const isSelected = selectedCode != null && feature.properties.code === selectedCode;
-      lyr.bindTooltip(`${feature.properties.name}（訪問地点 ${placeCount} 件）`, { className: 'pref-tooltip' });
+      lyr.bindTooltip(feature.properties.name + tr('（{s}）', ' ({s})', { s: tooltipSuffix(entry) }), { className: 'pref-tooltip' });
       // Leaflet's SVG renderer paints features in the order they were added,
       // so a thick highlighted border can get partially painted-over by a
       // later-drawn neighbouring prefecture along their shared edge — the
@@ -219,8 +241,7 @@ function buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed = fa
       },
       onEachFeature: (feature, lyr) => {
         const entry = aggregates.get(feature.properties.code);
-        const placeCount = entry ? entry.placeCount : 0;
-        lyr.bindTooltip(`${feature.properties.name}（訪問地点 ${placeCount} 件）`, { className: 'pref-tooltip' });
+        lyr.bindTooltip(feature.properties.name + tr('（{s}）', ' ({s})', { s: tooltipSuffix(entry) }), { className: 'pref-tooltip' });
         lyr.on('click', () => onClickMuni(feature.properties.code));
         // Same z-order fix as the prefecture layer (see renderNational) — a
         // hovered ward's thicker border would otherwise get partly hidden
@@ -315,6 +336,35 @@ export function clearMarkers(markerLayerRef) {
 // list (via the shared formatPlaceLabel), instead of just the muni name.
 // Returns Map<row-key, marker> so the caller can push a label update into an
 // already-open tooltip later, once its fetch resolves.
+// Timelapse playback on the national view: every 滞在地点 visited so far
+// (cumulative up to the current month) as small non-interactive dots, so the
+// map shows *where* in each prefecture you went, not just which prefectures
+// got painted. Can be thousands of points redrawn every tick (~500ms), so
+// they go on a single canvas renderer rather than one SVG node each, and are
+// non-interactive (purely visual — the national view is not drillable while
+// playback is running anyway). `rows` is computeClusterRanking output, so
+// privacy mode's municipality rollup applies automatically.
+export function renderTimelapsePoints(map, layerRef, rows) {
+  if (!layerRef.renderer) layerRef.renderer = L.canvas({ pane: 'clusterMarkerPane', padding: 0.5 });
+  if (!layerRef.layer) layerRef.layer = L.layerGroup().addTo(map);
+  layerRef.layer.clearLayers();
+  for (const row of rows) {
+    L.circleMarker([row.lat, row.lng], {
+      renderer: layerRef.renderer,
+      radius: 2.5 + Math.min(4, Math.log1p(row.count)),
+      color: MARKER_BORDER_COLOR,
+      weight: 0.8,
+      fillColor: MARKER_FILL_COLOR,
+      fillOpacity: 0.85,
+      interactive: false,
+    }).addTo(layerRef.layer);
+  }
+}
+
+export function clearTimelapsePoints(layerRef) {
+  if (layerRef.layer) layerRef.layer.clearLayers();
+}
+
 export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labelCache = null) {
   if (!markerLayerRef.layer) {
     markerLayerRef.layer = L.layerGroup().addTo(map);
@@ -339,8 +389,8 @@ export function renderClusterMarkers(map, markerLayerRef, rows, onClickRow, labe
       pane: 'clusterMarkerPane',
     });
     const labelEntry = labelCache && row.clusterId != null ? labelCache.get(row.clusterId) : null;
-    const nameLabel = row.muniName ? formatPlaceLabel(row.muniName, labelEntry) : '';
-    marker.bindTooltip(`${nameLabel ? nameLabel + ' — ' : ''}滞在 ${row.count} 回`);
+    const nameLabel = row.muniName ? escapeHtml(formatPlaceLabel(row.muniName, labelEntry)) : '';
+    marker.bindTooltip(`${nameLabel ? nameLabel + ' — ' : ''}${tr('滞在 {n} 回', '{n} stays', { n: row.count })}`);
     marker.on('click', () => onClickRow(row));
     marker.addTo(markerLayerRef.layer);
     markersByKey.set(key, marker);

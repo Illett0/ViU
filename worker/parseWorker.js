@@ -2,15 +2,14 @@
 
 const { parentPort, workerData } = require('worker_threads');
 const fs = require('fs');
-const { findPrefecture, getPrefectureList } = require('../lib/prefectures');
-const { findMunicipality, getMunicipalityList } = require('../lib/municipalities');
+const { getPrefectureList } = require('../lib/prefectures');
+const { getMunicipalityList } = require('../lib/municipalities');
+const { locate } = require('../lib/locate');
 const { clusterPoints } = require('../lib/cluster');
 const { parseLatLng } = require('../lib/coords');
 const geoCache = require('../lib/geoCache');
 
-// Bump whenever the shape of cached data (below) changes, so stale caches
-// from an older version of this file are ignored instead of misread.
-const SCHEMA_VERSION = 2;
+const { SCHEMA_VERSION } = geoCache;
 const DEFAULT_CLUSTER_THRESHOLD = 50;
 
 function report(phase, current, total) {
@@ -119,15 +118,14 @@ function run() {
       const coords = parseLatLng(top.placeLocation && top.placeLocation.latLng);
       if (coords) {
         const parts = localParts(seg.startTime, seg.startTimeTimezoneUtcOffsetMinutes);
-        const pref = findPrefecture(coords.lat, coords.lng);
         visits.push({
           placeId: top.placeId || null,
           semanticType: top.semanticType || null,
           probability: typeof seg.visit.probability === 'number' ? seg.visit.probability : null,
           lat: coords.lat,
           lng: coords.lng,
-          prefCode: pref ? pref.code : 0,
-          muniCode: null, // filled in below, after the main loop
+          prefCode: 0, // prefCode/muniCode filled in below, after the main loop (see lib/locate.js)
+          muniCode: null,
           clusterId: null, // filled in below, after the main loop
           startEpoch: parts ? parts.epoch : null,
           endEpoch: Date.parse(seg.endTime) || null,
@@ -141,8 +139,6 @@ function run() {
       const startCoords = parseLatLng(act.start && act.start.latLng);
       const endCoords = parseLatLng(act.end && act.end.latLng);
       const parts = localParts(seg.startTime, seg.startTimeTimezoneUtcOffsetMinutes);
-      const startPref = startCoords ? findPrefecture(startCoords.lat, startCoords.lng) : null;
-      const endPref = endCoords ? findPrefecture(endCoords.lat, endCoords.lng) : null;
       const endEpoch = Date.parse(seg.endTime);
       activities.push({
         mode: canonicalizeMode((act.topCandidate && act.topCandidate.type) || 'UNKNOWN'),
@@ -158,9 +154,9 @@ function run() {
         startLng: startCoords ? startCoords.lng : null,
         endLat: endCoords ? endCoords.lat : null,
         endLng: endCoords ? endCoords.lng : null,
-        startPrefCode: startPref ? startPref.code : 0,
-        endPrefCode: endPref ? endPref.code : 0,
-        startMuniCode: null, // filled in below
+        startPrefCode: 0, // filled in below
+        endPrefCode: 0,
+        startMuniCode: null,
         endMuniCode: null,
       });
     } else if (seg.timelinePath) {
@@ -171,15 +167,16 @@ function run() {
         if (!coords) continue;
         const epoch = Date.parse(p.time);
         const parts = localParts(p.time, seg.startTimeTimezoneUtcOffsetMinutes);
-        const pref = findPrefecture(coords.lat, coords.lng);
-        // Compact tuple form: [lat, lng, epoch, prefCode, year, month]
+        // Compact tuple form: [lat, lng, epoch, prefCode, year, month, muniCode]
+        // (prefCode/muniCode filled in below, after the main loop).
         pathPoints.push([
           coords.lat,
           coords.lng,
           Number.isNaN(epoch) ? null : epoch,
-          pref ? pref.code : 0,
+          0,
           parts ? parts.year : null,
           parts ? parts.month : null,
+          null,
         ]);
         // Keep the per-point epoch (and the segment's own tz offset, needed to
         // re-derive local year/month per run below) — [lat, lng, epoch].
@@ -199,7 +196,7 @@ function run() {
     }
   }
 
-  // ---- Municipality lookup + default clustering, disk-cached per source file ----
+  // ---- Prefecture/municipality lookup + default clustering, disk-cached per source file ----
 
   const fingerprint = geoCache.computeFingerprint(filePath);
   const cached = geoCache.readCache(userDataPath, fingerprint);
@@ -207,44 +204,65 @@ function run() {
     cached &&
     cached.schemaVersion === SCHEMA_VERSION &&
     cached.visitCount === visits.length &&
-    cached.activityCount === activities.length;
+    cached.activityCount === activities.length &&
+    cached.pathPointCount === pathPoints.length;
 
-  let visitMuniCodes;
-  let activityMuniCodes; // [{start, end}, ...]
+  // Each location is stored as [muniCode|null, prefCode] (see lib/locate.js).
+  let visitLocs;
+  let activityLocs; // [[start], [end]] per activity
+  let pathPointLocs;
 
-  if (cacheValid && cached.visitMuniCodes && cached.activityMuniCodes) {
-    visitMuniCodes = cached.visitMuniCodes;
-    activityMuniCodes = cached.activityMuniCodes;
-    report('municipality', visits.length + activities.length * 2, visits.length + activities.length * 2);
+  if (cacheValid && cached.visitLocs && cached.activityLocs && cached.pathPointLocs) {
+    visitLocs = cached.visitLocs;
+    activityLocs = cached.activityLocs;
+    pathPointLocs = cached.pathPointLocs;
+    const t = visits.length + activities.length * 2 + pathPoints.length;
+    report('municipality', t, t);
   } else {
-    visitMuniCodes = [];
-    activityMuniCodes = [];
-    const totalLookups = visits.length + activities.length * 2;
+    const loc = (lat, lng) => {
+      const r = locate(lat, lng);
+      return [r.muniCode, r.prefCode];
+    };
+    visitLocs = [];
+    activityLocs = [];
+    pathPointLocs = [];
+    const totalLookups = visits.length + activities.length * 2 + pathPoints.length;
     let done = 0;
     const lookupEvery = Math.max(1, Math.floor(totalLookups / 100));
+    const tick = (n) => {
+      const before = done;
+      done += n;
+      if (Math.floor(before / lookupEvery) !== Math.floor(done / lookupEvery)) report('municipality', done, totalLookups);
+    };
 
     for (const v of visits) {
-      const m = findMunicipality(v.lat, v.lng);
-      visitMuniCodes.push(m ? m.code : null);
-      done += 1;
-      if (done % lookupEvery === 0) report('municipality', done, totalLookups);
+      visitLocs.push(loc(v.lat, v.lng));
+      tick(1);
     }
     for (const a of activities) {
-      const ms = a.startLat != null ? findMunicipality(a.startLat, a.startLng) : null;
-      const me = a.endLat != null ? findMunicipality(a.endLat, a.endLng) : null;
-      activityMuniCodes.push({ start: ms ? ms.code : null, end: me ? me.code : null });
-      done += 2;
-      if (done % lookupEvery === 0) report('municipality', done, totalLookups);
+      activityLocs.push([a.startLat != null ? loc(a.startLat, a.startLng) : [null, 0], a.endLat != null ? loc(a.endLat, a.endLng) : [null, 0]]);
+      tick(2);
+    }
+    for (const p of pathPoints) {
+      pathPointLocs.push(loc(p[0], p[1]));
+      tick(1);
     }
     report('municipality', totalLookups, totalLookups);
   }
 
   visits.forEach((v, i) => {
-    v.muniCode = visitMuniCodes[i] || null;
+    v.muniCode = visitLocs[i][0];
+    v.prefCode = visitLocs[i][1];
   });
   activities.forEach((a, i) => {
-    a.startMuniCode = activityMuniCodes[i] ? activityMuniCodes[i].start : null;
-    a.endMuniCode = activityMuniCodes[i] ? activityMuniCodes[i].end : null;
+    a.startMuniCode = activityLocs[i][0][0];
+    a.startPrefCode = activityLocs[i][0][1];
+    a.endMuniCode = activityLocs[i][1][0];
+    a.endPrefCode = activityLocs[i][1][1];
+  });
+  pathPoints.forEach((p, i) => {
+    p[3] = pathPointLocs[i][1];
+    p[6] = pathPointLocs[i][0];
   });
 
   let clusterResult;
@@ -262,7 +280,7 @@ function run() {
     v.clusterId = clusterResult.assignment[i];
   });
 
-  // Persist/refresh the cache (always rewrite so activityMuniCodes/visitCount
+  // Persist/refresh the cache (always rewrite so the location arrays/visitCount
   // stay in sync even if only the cluster threshold was previously cached).
   const clustersByThreshold = (cacheValid && cached.clustersByThreshold) || {};
   clustersByThreshold[String(DEFAULT_CLUSTER_THRESHOLD)] = clusterResult;
@@ -270,8 +288,10 @@ function run() {
     schemaVersion: SCHEMA_VERSION,
     visitCount: visits.length,
     activityCount: activities.length,
-    visitMuniCodes,
-    activityMuniCodes,
+    pathPointCount: pathPoints.length,
+    visitLocs,
+    activityLocs,
+    pathPointLocs,
     clustersByThreshold,
   });
 
@@ -306,7 +326,10 @@ function run() {
       dateStr: startParts ? startParts.dateStr : null,
       mode,
       inferred: false,
-      points: runPoints.map((p) => [p[0], p[1]]),
+      // [lat, lng, epoch] — the per-point time lets exclusion-zone trimming
+      // (renderer/aggregate.mjs trimSegmentByZones) report the visible
+      // portion's real start/end time instead of the whole run's.
+      points: runPoints.map((p) => [p[0], p[1], p[2]]),
     });
   }
 
@@ -390,8 +413,8 @@ function run() {
       mode: a.mode,
       inferred: true,
       points: [
-        [a.startLat, a.startLng],
-        [a.endLat, a.endLng],
+        [a.startLat, a.startLng, a.startEpoch],
+        [a.endLat, a.endLng, a.endEpoch],
       ],
     });
   }

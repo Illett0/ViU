@@ -39,7 +39,6 @@ const {
   CLUSTER_A,
   CLUSTER_B,
   OSAKA,
-  TOKYO_BACKDROP,
   TOKYO_CODE,
   OSAKA_CODE,
   near,
@@ -48,6 +47,7 @@ const {
   goToPlace,
   latLngToPoint,
   getView,
+  settle,
   createStepRunner,
   launchApp,
   completeOnboarding,
@@ -89,18 +89,74 @@ async function main() {
       assert.strictEqual(view.view, 'national', 'back-link from prefecture should land on national view');
     });
 
-    // ---- Bug #2: clicking the dimmed prefecture backdrop while a place is
-    // selected must not reset the selection back to the bare ranking ----
-    await step('bug #2: backdrop misclick on the same prefecture does not reset the place selection', async () => {
+    // ---- Clicking the selected prefecture's backdrop (anywhere that isn't
+    // a pin) while a place is selected goes back to the prefecture ranking —
+    // without moving the map (no re-fit to the whole prefecture). This used
+    // to be deliberately ignored as a "misclick" (bug #2); it's now the
+    // intended "back" gesture. ----
+    await step('clicking off-pin while a place is selected returns to the prefecture without changing zoom/center', async () => {
       await goToPrefecture(page, TOKYO_CODE);
       await goToPlace(page, { clusterId: rowA.clusterId, muniCode: rowA.muniCode, code: TOKYO_CODE });
 
-      const pt = await latLngToPoint(page, TOKYO_BACKDROP);
-      await page.mouse.click(pt.x, pt.y);
+      const before = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
+      // ~150px off pin A (≈1.5km at the place zoom): still inside Tokyo,
+      // on screen, and clear of every pin.
+      const pinA = await latLngToPoint(page, CLUSTER_A);
+      await page.mouse.click(pinA.x + 150, pinA.y + 150);
+      await settle(page);
 
       const view = await getView(page);
-      assert.strictEqual(view.view, 'place', 'a backdrop misclick within the same prefecture should not have left the place view');
-      assert.strictEqual(view.params.clusterId, rowA.clusterId);
+      assert.strictEqual(view.view, 'prefecture', 'an off-pin click should go back to the prefecture view');
+      assert.strictEqual(view.params.code, TOKYO_CODE);
+      const after = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
+      assert.strictEqual(after.zoom, before.zoom, 'zoom must not change when leaving the place');
+      assert(near(after.center.lat, before.center.lat, 1e-6) && near(after.center.lng, before.center.lng, 1e-6), 'center must not change when leaving the place');
+    });
+
+    await step('the same off-pin click works in municipality granularity', async () => {
+      await page.evaluate(() => window.__pathBrowserTest.setGranularity('municipality'));
+      await goToPrefecture(page, TOKYO_CODE);
+      await goToPlace(page, { clusterId: rowA.clusterId, muniCode: rowA.muniCode, code: TOKYO_CODE });
+      const before = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
+      // ~150px off pin A (≈1.5km at the place zoom): still inside Tokyo,
+      // on screen, and clear of every pin.
+      const pinA = await latLngToPoint(page, CLUSTER_A);
+      await page.mouse.click(pinA.x + 150, pinA.y + 150);
+      await settle(page);
+      assert.strictEqual((await getView(page)).view, 'prefecture');
+      const after = await page.evaluate(() => window.__pathBrowserTest.getMapZoom());
+      assert.strictEqual(after.zoom, before.zoom);
+      await page.evaluate(() => window.__pathBrowserTest.setGranularity('prefecture'));
+    });
+
+    await step('clicking open sea (outside every polygon) while a place is selected also goes back', async () => {
+      await goToPrefecture(page, TOKYO_CODE);
+      await goToPlace(page, { clusterId: rowA.clusterId, muniCode: rowA.muniCode, code: TOKYO_CODE });
+      // Pan (same zoom) to the middle of Tokyo Bay, outside every land polygon.
+      const zoom = (await page.evaluate(() => window.__pathBrowserTest.getMapZoom())).zoom;
+      await page.evaluate((z) => window.__pathBrowserTest.setMapView(35.48, 139.86, z), zoom);
+      await settle(page);
+      const sea = await latLngToPoint(page, { lat: 35.48, lng: 139.86 });
+      await page.mouse.click(sea.x, sea.y);
+      await settle(page);
+      assert.strictEqual((await getView(page)).view, 'prefecture');
+      assert.strictEqual((await page.evaluate(() => window.__pathBrowserTest.getMapZoom())).zoom, zoom);
+    });
+
+    await step('clicking a different pin while a place is selected still switches places', async () => {
+      await goToPrefecture(page, TOKYO_CODE);
+      await goToPlace(page, { clusterId: rowA.clusterId, muniCode: rowA.muniCode, code: TOKYO_CODE });
+      const rows = await page.evaluate(() => window.__pathBrowserTest.getClusterRanking());
+      const rowBNow = rows.find((r) => near(r.lat, CLUSTER_B.lat) && near(r.lng, CLUSTER_B.lng));
+      // A and B are ~100m apart — zoom in far enough that their pins don't overlap.
+      await page.evaluate(({ lat, lng }) => window.__pathBrowserTest.setMapView(lat, lng, 18), CLUSTER_B);
+      await settle(page);
+      const pt = await latLngToPoint(page, CLUSTER_B);
+      await page.mouse.click(pt.x, pt.y);
+      await settle(page);
+      const view = await getView(page);
+      assert.strictEqual(view.view, 'place', 'clicking another pin should select it, not go back');
+      assert.strictEqual(view.params.clusterId, rowBNow.clusterId);
     });
 
     // ---- Bug #3: overlapping 滞在地点 pins — the higher-visit-count pin

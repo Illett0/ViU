@@ -1,4 +1,21 @@
 import { colorForMode } from './routeView.mjs';
+import { numberLocale, tr } from './i18n.mjs';
+
+const MODE_LABELS_EN = {
+  WALKING: 'Walking',
+  CYCLING: 'Cycling',
+  RUNNING: 'Running',
+  IN_PASSENGER_VEHICLE: 'Car',
+  IN_TAXI: 'Taxi',
+  IN_BUS: 'Bus',
+  IN_TRAIN: 'Train',
+  IN_SUBWAY: 'Subway',
+  IN_TRAM: 'Tram',
+  IN_FERRY: 'Ferry',
+  FLYING: 'Flight',
+  IN_GONDOLA_LIFT: 'Ropeway',
+  UNKNOWN: 'Unknown',
+};
 
 const MODE_LABELS = {
   WALKING: '徒歩',
@@ -20,19 +37,19 @@ const MODE_LABELS = {
 };
 
 function modeLabel(mode) {
-  return MODE_LABELS[mode] || mode;
+  return tr(MODE_LABELS[mode], MODE_LABELS_EN[mode]) || mode;
 }
 
 function km(meters) {
-  return (meters / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 1 });
+  return (meters / 1000).toLocaleString(numberLocale(), { maximumFractionDigits: 1 });
 }
 
 function formatDuration(ms) {
   const totalMinutes = Math.round(ms / 60000);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
-  if (h === 0) return `${m}分`;
-  return `${h}時間${m}分`;
+  if (h === 0) return tr('{m}分', '{m} min', { m });
+  return tr('{h}時間{m}分', '{h} h {m} min', { h, m });
 }
 
 function setupCanvas(canvas) {
@@ -49,7 +66,7 @@ function setupCanvas(canvas) {
 function emptyMessage(ctx) {
   ctx.fillStyle = '#9aa3b2';
   ctx.font = '13px sans-serif';
-  ctx.fillText('データがありません', 12, 20);
+  ctx.fillText(tr('データがありません', 'No data'), 12, 20);
 }
 
 function drawAxesAndGrid(ctx, padding, w, h, maxVal, formatValue) {
@@ -168,34 +185,41 @@ export function renderStats(
     dwellCapNote,
     conquestRates,
     onConquestClick,
+    onDayClick,
   }
 ) {
   container.innerHTML = '';
+  // Dates become links to that day's route view when the caller allows it
+  // (not under privacy mode, where the route views are off).
+  const dayLink = (dateStr) =>
+    onDayClick && dateStr
+      ? `<button type="button" class="link-btn" data-day="${dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: dateStr })}">${dateStr}</button>`
+      : dateStr || '-';
 
   const grid = document.createElement('div');
   grid.className = 'stats-grid';
 
   const totalCard = document.createElement('div');
   totalCard.className = 'stat-card';
-  totalCard.innerHTML = `<div class="big-number">${km(stats.totalDistance)} km</div><div class="caption">総移動距離</div>`;
+  totalCard.innerHTML = `<div class="big-number">${km(stats.totalDistance)} km</div><div class="caption">${tr('総移動距離', 'Total distance')}</div>`;
   grid.appendChild(totalCard);
 
   const totalTrips = stats.byMode.reduce((s, m) => s + m.count, 0);
   const modeCountCard = document.createElement('div');
   modeCountCard.className = 'stat-card';
-  modeCountCard.innerHTML = `<div class="big-number">${totalTrips}</div><div class="caption">移動回数</div>`;
+  modeCountCard.innerHTML = `<div class="big-number">${totalTrips}</div><div class="caption">${tr('移動回数', 'Trips')}</div>`;
   grid.appendChild(modeCountCard);
 
   const walkCard = document.createElement('div');
   walkCard.className = 'stat-card';
-  walkCard.innerHTML = `<div class="big-number">${walkingRatio.toFixed(1)} 倍</div><div class="caption">徒歩の累計距離は東海道五十三次（約490km）の何倍か</div>`;
+  walkCard.innerHTML = `<div class="big-number">${walkingRatio.toFixed(1)}${tr(' 倍', '×')}</div><div class="caption">${tr('徒歩の累計距離は東海道五十三次（約490km）の何倍か', 'Total walking distance as a multiple of the Tokaido 53 Stations route (about 490 km)')}</div>`;
   grid.appendChild(walkCard);
 
   if (newlyVisited && newlyVisited.length > 0) {
     const newlyCard = document.createElement('div');
     newlyCard.className = 'stat-card';
     newlyCard.innerHTML =
-      `<div class="big-number">${newlyVisited.length}</div><div class="caption">この年に初めて訪れた県</div>` +
+      `<div class="big-number">${newlyVisited.length}</div><div class="caption">${tr('この年に初めて訪れた県', 'Prefectures first visited this year')}</div>` +
       `<ul class="newly-visited-list">${newlyVisited.map((p) => `<li>${p.name}</li>`).join('')}</ul>`;
     grid.appendChild(newlyCard);
   }
@@ -205,16 +229,16 @@ export function renderStats(
   // ---- Mode breakdown table ----
   const modeTitle = document.createElement('h3');
   modeTitle.className = 'section-title';
-  modeTitle.textContent = '移動手段別の内訳';
+  modeTitle.textContent = tr('移動手段別の内訳', 'Breakdown by travel mode');
   container.appendChild(modeTitle);
 
   if (stats.byMode.length === 0) {
-    container.insertAdjacentHTML('beforeend', '<p class="empty-note">この期間の移動データはありません。</p>');
+    container.insertAdjacentHTML('beforeend', `<p class="empty-note">${tr('この期間の移動データはありません。', 'No travel data in this period.')}</p>`);
   } else {
     const table = document.createElement('table');
     table.className = 'mode-table';
     table.innerHTML =
-      '<thead><tr><th>手段</th><th>距離</th><th>回数</th><th>合計時間</th><th>平均速度</th></tr></thead><tbody>' +
+      `<thead><tr><th>${tr('手段', 'Mode')}</th><th>${tr('距離', 'Distance')}</th><th>${tr('回数', 'Trips')}</th><th>${tr('合計時間', 'Total time')}</th><th>${tr('平均速度', 'Avg. speed')}</th></tr></thead><tbody>` +
       stats.byMode
         .map(
           (m) =>
@@ -230,7 +254,7 @@ export function renderStats(
   // ---- Monthly stacked chart ----
   const monthlyTitle = document.createElement('h3');
   monthlyTitle.className = 'section-title';
-  monthlyTitle.textContent = '月別移動距離 (km) — 手段別内訳';
+  monthlyTitle.textContent = tr('月別移動距離 (km) — 手段別内訳', 'Monthly distance (km) by travel mode');
   container.appendChild(monthlyTitle);
 
   const monthlyCanvas = document.createElement('canvas');
@@ -242,20 +266,20 @@ export function renderStats(
   // ---- Longest trips ----
   const longestTitle = document.createElement('h3');
   longestTitle.className = 'section-title';
-  longestTitle.textContent = '最長移動ランキング';
+  longestTitle.textContent = tr('最長移動ランキング', 'Longest trips');
   container.appendChild(longestTitle);
 
   if (!longestTrips || longestTrips.length === 0) {
-    container.insertAdjacentHTML('beforeend', '<p class="empty-note">この期間の移動データはありません。</p>');
+    container.insertAdjacentHTML('beforeend', `<p class="empty-note">${tr('この期間の移動データはありません。', 'No travel data in this period.')}</p>`);
   } else {
     const table = document.createElement('table');
     table.className = 'mode-table';
     table.innerHTML =
-      '<thead><tr><th>#</th><th>日付</th><th>手段</th><th>距離</th><th>始点</th><th>終点</th></tr></thead><tbody>' +
+      `<thead><tr><th>#</th><th>${tr('日付', 'Date')}</th><th>${tr('手段', 'Mode')}</th><th>${tr('距離', 'Distance')}</th><th>${tr('始点', 'From')}</th><th>${tr('終点', 'To')}</th></tr></thead><tbody>` +
       longestTrips
         .map(
           (t, i) =>
-            `<tr><td>${i + 1}</td><td>${t.dateStr || '-'}</td><td>${modeLabel(t.mode)}</td><td>${km(t.distanceMeters)} km</td><td>${t.startMuniName}</td><td>${t.endMuniName}</td></tr>`
+            `<tr><td>${i + 1}</td><td>${dayLink(t.dateStr)}</td><td>${modeLabel(t.mode)}</td><td>${km(t.distanceMeters)} km</td><td>${t.startMuniName}</td><td>${t.endMuniName}</td></tr>`
         )
         .join('') +
       '</tbody>';
@@ -265,21 +289,21 @@ export function renderStats(
   // ---- Behavior patterns ----
   const patternTitle = document.createElement('h3');
   patternTitle.className = 'section-title';
-  patternTitle.textContent = '行動パターン';
+  patternTitle.textContent = tr('行動パターン', 'Activity patterns');
   container.appendChild(patternTitle);
 
   const patternGrid = document.createElement('div');
   patternGrid.className = 'pattern-grid';
 
   const dowBlock = document.createElement('div');
-  dowBlock.innerHTML = '<h4>曜日別 平均移動距離 (km)</h4>';
+  dowBlock.innerHTML = `<h4>${tr('曜日別 平均移動距離 (km)', 'Average distance by weekday (km)')}</h4>`;
   const dowCanvas = document.createElement('canvas');
   dowCanvas.className = 'stats-chart stats-chart-small';
   dowBlock.appendChild(dowCanvas);
   patternGrid.appendChild(dowBlock);
 
   const hourBlock = document.createElement('div');
-  hourBlock.innerHTML = '<h4>時間帯別 移動開始回数</h4>';
+  hourBlock.innerHTML = `<h4>${tr('時間帯別 移動開始回数', 'Trips started by hour')}</h4>`;
   const hourCanvas = document.createElement('canvas');
   hourCanvas.className = 'stats-chart stats-chart-small';
   hourBlock.appendChild(hourCanvas);
@@ -291,39 +315,39 @@ export function renderStats(
     drawSimpleBarChart(dowCanvas, dayOfWeek, { value: (d) => d.avgDistance, label: (d) => d.label, formatValue: km });
     drawSimpleBarChart(hourCanvas, hourly, {
       value: (h) => h.count,
-      label: (h) => (h.hour % 3 === 0 ? h.hour + '時' : ''),
+      label: (h) => (h.hour % 3 === 0 ? h.hour + tr('時', 'h') : ''),
       color: '#ffb454',
     });
   });
 
   const topDaysTitle = document.createElement('h4');
-  topDaysTitle.textContent = '最も移動した日 トップ5';
+  topDaysTitle.textContent = tr('最も移動した日 トップ5', 'Top 5 travel days');
   container.appendChild(topDaysTitle);
 
   if (!topDays || topDays.length === 0) {
-    container.insertAdjacentHTML('beforeend', '<p class="empty-note">この期間の移動データはありません。</p>');
+    container.insertAdjacentHTML('beforeend', `<p class="empty-note">${tr('この期間の移動データはありません。', 'No travel data in this period.')}</p>`);
   } else {
     const list = document.createElement('ul');
     list.className = 'rank-list';
-    list.innerHTML = topDays.map((d, i) => `<li><span>${i + 1}. ${d.dateStr}</span><span class="rank-count">${km(d.distance)} km</span></li>`).join('');
+    list.innerHTML = topDays.map((d, i) => `<li><span>${i + 1}. ${dayLink(d.dateStr)}</span><span class="rank-count">${km(d.distance)} km</span></li>`).join('');
     container.appendChild(list);
   }
 
   // ---- Municipality conquest ranking ----
   const conquestTitle = document.createElement('h3');
   conquestTitle.className = 'section-title';
-  conquestTitle.textContent = '市区町村制覇率ランキング（都道府県別）';
+  conquestTitle.textContent = tr('市区町村制覇率ランキング（都道府県別）', 'Municipality coverage by prefecture');
   container.appendChild(conquestTitle);
 
   if (!conquestRates || conquestRates.length === 0) {
-    container.insertAdjacentHTML('beforeend', '<p class="empty-note">データがありません。</p>');
+    container.insertAdjacentHTML('beforeend', `<p class="empty-note">${tr('データがありません。', 'No data.')}</p>`);
   } else {
     const list = document.createElement('ul');
     list.className = 'rank-list';
     list.innerHTML = conquestRates
       .map(
         (r, i) =>
-          `<li class="place-item" data-code="${r.code}"><span>${i + 1}. ${r.name}</span><span class="rank-count">${r.visited} / ${r.total}（${(r.rate * 100).toFixed(0)}%）</span></li>`
+          `<li class="place-item" data-code="${r.code}"><span>${i + 1}. ${r.name}</span><span class="rank-count">${r.visited} / ${r.total}${tr('（{p}%）', ' ({p}%)', { p: (r.rate * 100).toFixed(0) })}${r.passOnly ? `<span class="pass-only-note">${tr(' ＋通過のみ {n}', ' +{n} passed through', { n: r.passOnly })}</span>` : ''}</span></li>`
       )
       .join('');
     container.appendChild(list);
@@ -338,10 +362,10 @@ export function renderStats(
   rankHeader.style.display = 'flex';
   rankHeader.style.alignItems = 'center';
   rankHeader.innerHTML =
-    `<span>${privacy ? 'よく行く場所ランキング（市区町村単位）' : 'よく行く場所ランキング'}</span>` +
+    `<span>${privacy ? tr('よく行く場所ランキング（市区町村単位）', 'Most visited places (by municipality)') : tr('よく行く場所ランキング', 'Most visited places')}</span>` +
     '<span class="sort-toggle">' +
-    `<button data-sort="count" class="${sortBy !== 'dwellMs' ? 'active' : ''}">回数順</button>` +
-    `<button data-sort="dwellMs" class="${sortBy === 'dwellMs' ? 'active' : ''}">滞在時間順</button>` +
+    `<button data-sort="count" class="${sortBy !== 'dwellMs' ? 'active' : ''}">${tr('回数順', 'By visits')}</button>` +
+    `<button data-sort="dwellMs" class="${sortBy === 'dwellMs' ? 'active' : ''}">${tr('滞在時間順', 'By time spent')}</button>` +
     '</span>';
   container.appendChild(rankHeader);
   if (onSortByChange) {
@@ -349,7 +373,7 @@ export function renderStats(
   }
 
   if (clusterRanking.length === 0) {
-    container.insertAdjacentHTML('beforeend', '<p class="empty-note">この期間の滞在データはありません。</p>');
+    container.insertAdjacentHTML('beforeend', `<p class="empty-note">${tr('この期間の滞在データはありません。', 'No stays in this period.')}</p>`);
   } else {
     const list = document.createElement('ul');
     list.className = 'rank-list';
@@ -357,16 +381,20 @@ export function renderStats(
       .slice(0, 20)
       .map(
         (p, i) =>
-          `<li><span>${i + 1}. ${p.muniName}</span><span class="rank-count">${p.count} 回 / ${formatDuration(p.dwellMs)}</span></li>`
+          `<li><span>${i + 1}. ${p.muniName}</span><span class="rank-count">${tr('{n} 回', '{n} visits', { n: p.count })} / ${formatDuration(p.dwellMs)}</span></li>`
       )
       .join('');
     container.appendChild(list);
   }
 
+  if (onDayClick) {
+    container.querySelectorAll('[data-day]').forEach((btn) => btn.addEventListener('click', () => onDayClick(btn.dataset.day)));
+  }
+
   if (dwellCapNote && dwellCapNote.cappedCount > 0) {
     container.insertAdjacentHTML(
       'beforeend',
-      `<p class="empty-note">※ ${dwellCapNote.cappedCount}件の滞在（全${dwellCapNote.totalVisits}件中）は24時間を超えていたため、集計上は24時間として計算しています。</p>`
+      `<p class="empty-note">${tr('※ {n}件の滞在（全{total}件中）は24時間を超えていたため、集計上は24時間として計算しています。', '* {n} of {total} stays were longer than 24 hours and are counted as 24 hours.', { n: dwellCapNote.cappedCount, total: dwellCapNote.totalVisits })}</p>`
     );
   }
 }

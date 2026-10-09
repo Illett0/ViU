@@ -4,7 +4,7 @@ const { parentPort, workerData } = require('worker_threads');
 const { clusterPoints } = require('../lib/cluster');
 const geoCache = require('../lib/geoCache');
 
-const SCHEMA_VERSION = 2;
+const { SCHEMA_VERSION } = geoCache;
 
 function report(phase, current, total) {
   parentPort.postMessage({ type: 'progress', phase, current, total });
@@ -26,7 +26,7 @@ function run() {
     clusterResult = { assignment, clusters: clusters.map((c) => ({ id: c.id, lat: c.lat, lng: c.lng, count: c.count })) };
 
     // Only merge into the cache if a valid full cache entry already exists —
-    // writing a partial entry here (without visitMuniCodes etc.) would corrupt
+    // writing a partial entry here (without visitLocs etc.) would corrupt
     // the cache for the next full parse of this same file.
     if (cacheValid) {
       cached.clustersByThreshold[String(threshold)] = clusterResult;

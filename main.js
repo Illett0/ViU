@@ -1,11 +1,12 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Worker } = require('worker_threads');
 const nominatim = require('./lib/nominatim');
 const exclusionZones = require('./lib/exclusionZones');
+const bookmarks = require('./lib/bookmarks');
 const recentFiles = require('./lib/recentFiles');
 const geoCache = require('./lib/geoCache');
 const photoCache = require('./lib/photoCache');
@@ -25,14 +26,77 @@ if (process.env.PATHBROWSER_TEST_USERDATA) {
 }
 
 let mainWindow;
+// Mirrors the renderer's privacy-mode toggle (renderer/app.mjs setPrivacy ->
+// app:set-privacy-mode). The renderer already never asks for a detail name
+// while privacy mode is on, but this is the one code path that sends
+// coordinates off the machine, so it's gated here too rather than trusting
+// the renderer alone. Defaults to ON, same as the renderer's own default.
+let privacyModeEnabled = true;
 let prefectureGeoJSONCache = null;
+
+// UI language (issue #22): 'ja' or 'en'. An explicit choice from the
+// settings screen is persisted in userData/settings.json; until then it
+// follows the OS language (Japanese OS -> 'ja', anything else -> 'en').
+// PATHBROWSER_TEST_LANG pins it for E2E runs, so the suite doesn't depend on
+// the machine's locale.
+const SUPPORTED_LANGUAGES = ['ja', 'en'];
+let currentLanguage = 'ja';
+
+function settingsPath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function readSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
+  } catch {
+    return {};
+  }
+}
+
+function resolveLanguage() {
+  const forced = process.env.PATHBROWSER_TEST_LANG;
+  if (SUPPORTED_LANGUAGES.includes(forced)) return forced;
+  const saved = readSettings().language;
+  if (SUPPORTED_LANGUAGES.includes(saved)) return saved;
+  return app.getLocale().toLowerCase().startsWith('ja') ? 'ja' : 'en';
+}
+
+// Picks the main-process string (native dialogs) for the current language.
+function tr(ja, en) {
+  return currentLanguage === 'en' ? en : ja;
+}
 let municipalityGeoJSONCache = null;
 
+// A launch right after installing/updating (see build/installer.nsh) should
+// not steal focus: the user may well be working in another app while the
+// installer finishes. The marker is consumed on first read so only that one
+// launch is affected, and ignored if stale (the "run ViU" box was unchecked
+// and the user starts ViU themselves much later — that launch should behave
+// normally). PATHBROWSER_TEST_QUIET_LAUNCH exercises the same path in E2E,
+// where there's no installer.
+const QUIET_LAUNCH_MARKER_MAX_AGE_MS = 10 * 60 * 1000;
+
+function consumeQuietLaunchMarker() {
+  if (process.argv.includes('--updated') || process.env.PATHBROWSER_TEST_QUIET_LAUNCH) return true;
+  const marker = path.join(path.dirname(process.execPath), 'installed-launch.marker');
+  try {
+    const { mtimeMs } = fs.statSync(marker);
+    fs.unlinkSync(marker);
+    return Date.now() - mtimeMs < QUIET_LAUNCH_MARKER_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
+  const quietLaunch = consumeQuietLaunchMarker();
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
-    icon: path.join(__dirname, 'build', 'icon.ico'),
+    show: false,
+    // macOS takes the icon from the app bundle (build.mac.icon) and ignores this.
+    icon: path.join(__dirname, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -43,6 +107,22 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
+  mainWindow.once('ready-to-show', () => {
+    if (!quietLaunch) {
+      mainWindow.show();
+      return;
+    }
+    // Appear only as a minimized taskbar button — never activated, never
+    // drawn over the app the user is using — and flash it so it's still
+    // noticeable that ViU is ready. Flashing stops once the user opens it.
+    // minimize() on a not-yet-shown window maps to SW_SHOWMINNOACTIVE on
+    // Windows (no showInactive() first, which would briefly draw the window
+    // on top of the user's work).
+    mainWindow.minimize();
+    mainWindow.flashFrame(true);
+    mainWindow.once('focus', () => mainWindow.flashFrame(false));
+  });
+
   // target="_blank" links (issue #15's export-instructions guide links to
   // Google's own timeline/Takeout pages) would otherwise silently do nothing —
   // Electron denies new-window creation by default unless handled. Route
@@ -51,9 +131,21 @@ function createWindow() {
     if (url.startsWith('https:') || url.startsWith('http:')) shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  // The app is a single local page — never let the window itself navigate
+  // away to a remote URL (e.g. a stray link without target="_blank", or a
+  // dropped file/URL), which would put an arbitrary web page in the same
+  // window that holds the user's location data.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file:')) {
+      event.preventDefault();
+      if (url.startsWith('https:') || url.startsWith('http:')) shell.openExternal(url);
+    }
+  });
 }
 
 app.whenReady().then(() => {
+  currentLanguage = resolveLanguage();
   createWindow();
 
   app.on('activate', () => {
@@ -67,6 +159,16 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('app:get-version', async () => {
   return app.getVersion();
+});
+
+ipcMain.handle('app:get-language', async () => currentLanguage);
+
+ipcMain.handle('app:set-language', async (event, language) => {
+  if (!SUPPORTED_LANGUAGES.includes(language)) return currentLanguage;
+  currentLanguage = language;
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(settingsPath(), JSON.stringify({ ...readSettings(), language }, null, 2));
+  return currentLanguage;
 });
 
 ipcMain.handle('timeline:get-prefecture-geojson', async () => {
@@ -101,7 +203,7 @@ ipcMain.handle('timeline:choose-file', async () => {
   if (process.env.PATHBROWSER_TEST_FILE) return process.env.PATHBROWSER_TEST_FILE;
 
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Googleタイムラインのエクスポートファイルを選択',
+    title: tr('Googleタイムラインのエクスポートファイルを選択', 'Select a Google Timeline export file'),
     filters: [{ name: 'JSON', extensions: ['json'] }],
     properties: ['openFile'],
   });
@@ -136,10 +238,11 @@ ipcMain.handle('timeline:parse-file', async (event, filePath) => {
     });
 
     worker.on('error', (err) => reject(err));
+    // A non-zero exit without a prior 'done'/'error' message means the worker
+    // crashed; reject so the renderer shows an error instead of waiting
+    // forever on the progress screen. (A no-op if already settled.)
     worker.on('exit', (code) => {
-      if (code !== 0) {
-        // A non-zero exit without a prior 'done'/'error' message means the worker crashed.
-      }
+      if (code !== 0) reject(new Error(`parse worker exited with code ${code}`));
     });
   });
 
@@ -179,7 +282,25 @@ ipcMain.handle('timeline:recluster', async (event, { fingerprint, threshold, poi
   });
 });
 
+ipcMain.handle('app:set-privacy-mode', async (event, enabled) => {
+  privacyModeEnabled = enabled !== false;
+});
+
+// Test-only escape hatch (issue #26): PATHBROWSER_TEST_GEOCODE_STUB=<delay ms>
+// answers detail-name requests locally with a deterministic fake label after
+// that delay, so E2E runs never hit the real Nominatim/Overpass services and
+// can observe the renderer's fetch queue at a controlled pace. E2E reads and
+// adjusts it from the main process via app.evaluate (globalThis.__viuGeocodeStub).
+const geocodeStub = process.env.PATHBROWSER_TEST_GEOCODE_STUB != null ? { delayMs: Number(process.env.PATHBROWSER_TEST_GEOCODE_STUB) || 0, calls: [] } : null;
+if (geocodeStub) globalThis.__viuGeocodeStub = geocodeStub;
+
 ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) => {
+  if (privacyModeEnabled) return { label: null, error: 'privacy-mode', fromCache: false };
+  if (geocodeStub) {
+    geocodeStub.calls.push({ placeId, lat, lng });
+    await new Promise((resolve) => setTimeout(resolve, geocodeStub.delayMs));
+    return { label: `stub ${lat.toFixed(4)},${lng.toFixed(4)}`, error: null, fromCache: false };
+  }
   return nominatim.reverseGeocode(app.getPath('userData'), { placeId, lat, lng });
 });
 
@@ -198,11 +319,67 @@ ipcMain.handle('cache:clear', async () => {
   return { geoCount, nominatimCount, photoCount, thumbnailCount };
 });
 
+// "すべてのデータを削除": unlike cache:clear above, this wipes everything ViU
+// has ever written under userData — including the recent-files history and
+// its timeline-backups/ (full copies of imported location-history exports),
+// exclusion zones, and the linked photo folder — plus Chromium's own
+// HTTP cache/storage for this app (map tiles reveal which areas were
+// viewed). Confirmed with a native dialog here in the main process rather
+// than a renderer confirm(), so the destructive step can't be triggered by
+// a single stray IPC call without the user seeing the prompt.
+const USER_DATA_ENTRIES = [
+  'geo-cache',
+  'nominatim-cache.json',
+  'overpass-cache.json',
+  'photo-cache.json',
+  'thumbnail-cache',
+  'recent-files.json',
+  'timeline-backups',
+  'exclusion-zones.json',
+  'settings.json',
+  'bookmarks.json',
+];
+
+ipcMain.handle('data:delete-all', async () => {
+  // Test-only escape hatch, mirroring PATHBROWSER_TEST_EXPORT_PATH: native
+  // message boxes can't be driven by UI automation.
+  const { response } = process.env.PATHBROWSER_TEST_CONFIRM_DELETE_ALL
+    ? { response: 0 }
+    : await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: [tr('すべて削除する', 'Delete everything'), tr('キャンセル', 'Cancel')],
+        defaultId: 1,
+        cancelId: 1,
+        title: tr('すべてのデータを削除', 'Delete all data'),
+        message: tr('ViUが保存したデータをすべて削除しますか？', 'Delete all data saved by ViU?'),
+        detail: tr(
+          '最近使ったファイルの履歴とアプリ内バックアップ（タイムラインのコピー）、除外ゾーン、ブックマーク、写真フォルダの連携設定、各種キャッシュが削除されます。元のタイムラインファイルや写真そのものは削除されません。この操作は取り消せません。',
+          'This deletes the recent-files history and in-app backups (copies of your timeline), exclusion zones, bookmarks, the linked photo folder setting, and all caches. Your original timeline file and photos are not deleted. This cannot be undone.'
+        ),
+      });
+  if (response !== 0) return { deleted: false };
+
+  const userDataPath = app.getPath('userData');
+  // Drop the in-memory copies too, so nothing deleted from disk can be
+  // re-persisted from memory afterwards.
+  nominatim.clearCache(userDataPath);
+  for (const name of USER_DATA_ENTRIES) {
+    try {
+      fs.rmSync(path.join(userDataPath, name), { recursive: true, force: true });
+    } catch (err) {
+      console.error('delete-all: failed to remove', name, err && err.code);
+    }
+  }
+  await session.defaultSession.clearCache();
+  await session.defaultSession.clearStorageData();
+  return { deleted: true };
+});
+
 ipcMain.handle('photos:choose-folder', async () => {
   if (process.env.PATHBROWSER_TEST_PHOTO_FOLDER) return process.env.PATHBROWSER_TEST_PHOTO_FOLDER;
 
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: '写真フォルダを選択',
+    title: tr('写真フォルダを選択', 'Select a photo folder'),
     properties: ['openDirectory'],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
@@ -321,6 +498,10 @@ ipcMain.handle('photos:get-thumbnail', async (event, filePath) => {
   }
 });
 
+ipcMain.handle('bookmarks:get', async () => bookmarks.readBookmarks(app.getPath('userData')));
+
+ipcMain.handle('bookmarks:save', async (event, list) => bookmarks.writeBookmarks(app.getPath('userData'), list));
+
 ipcMain.handle('timeline:get-zones', async () => {
   return exclusionZones.readZones(app.getPath('userData'));
 });
@@ -345,9 +526,9 @@ ipcMain.handle('timeline:export-png', async (event, rect) => {
   }
 
   const result = await dialog.showSaveDialog(mainWindow, {
-    title: '制覇マップをPNGで保存',
+    title: tr('制覇マップをPNGで保存', 'Save the coverage map as PNG'),
     defaultPath: 'viu-map.png',
-    filters: [{ name: 'PNG画像', extensions: ['png'] }],
+    filters: [{ name: tr('PNG画像', 'PNG image'), extensions: ['png'] }],
   });
   if (result.canceled || !result.filePath) return null;
   fs.writeFileSync(result.filePath, image.toPNG());

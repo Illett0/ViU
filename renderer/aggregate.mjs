@@ -1,10 +1,27 @@
 // Pure data-aggregation helpers. No DOM access here so this stays testable
 // with plain Node and reusable between the map view and the stats view.
 
+import { tr } from './i18n.mjs';
+
 const PRIVACY_RADIUS_METERS = 1000;
 const TOKAIDO_53_KM = 490;
 const MAX_DWELL_MS = 24 * 60 * 60 * 1000;
 const MAX_ESTIMATION_GAP_MS = 2 * 60 * 60 * 1000; // 2h — see estimatePhotoLocations
+
+// Displayed calendar dates/years for first/last-visit epochs. Every place this
+// app aggregates is inside Japan, so its local calendar is JST (UTC+9, no
+// DST) — the same default worker/parseWorker.js's localPartsFromEpoch uses.
+// Formatting the raw epoch in UTC instead put anything before 09:00 JST on
+// the previous day (and a 2024-01-01 06:00 first visit in 2023).
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+function localDateStr(epoch) {
+  return new Date(epoch + JST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function localYear(epoch) {
+  return new Date(epoch + JST_OFFSET_MS).getUTCFullYear();
+}
 
 function distanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -97,7 +114,65 @@ function trimSegmentByZones(seg, zones) {
     }
   }
   if (current.length >= 2) runs.push(current);
-  return runs.map((points) => ({ ...seg, points }));
+  // Each surviving run carries its *own* time span (from its first/last
+  // point's epoch, see parseWorker's [lat, lng, epoch] points) and a
+  // `trimmed` flag, so nothing downstream (tooltips, the day view timeline)
+  // shows the original run's times — e.g. the exact moment someone left a
+  // zoned-out home.
+  const trimmed = runs.length !== 1 || runs[0].length !== seg.points.length;
+  return runs.map((points) => {
+    if (!trimmed) return seg;
+    const first = points[0][2];
+    const last = points[points.length - 1][2];
+    return { ...seg, points, trimmed: true, startEpoch: first ?? seg.startEpoch, endEpoch: last ?? seg.endEpoch };
+  });
+}
+
+// What the day view may show of one move (activity) once exclusion zones
+// apply. Activities themselves aren't zone-filtered (aggregate stats keep
+// them, see applyExclusionZones), so for display:
+//   - a move that doesn't touch any zone is shown as-is;
+//   - a move that starts/ends in a zone, or whose route was cut by one, is
+//     reduced to the part outside the zones: its time span and distance come
+//     from the visible (already-trimmed) route points within the move's own
+//     time window — `startCut`/`endCut` mark which side was cut;
+//   - if nothing of it is visible (no GPS trace outside the zone), it is
+//     hidden entirely (returns null).
+// `segments` must be the zone-trimmed segments (applyExclusionZones output).
+const CUT_TOLERANCE_MS = 60 * 1000;
+function visibleMovePortion(activity, segments, zones) {
+  const a = activity;
+  const full = { startEpoch: a.startEpoch, endEpoch: a.endEpoch, distanceMeters: a.distanceMeters || 0, partial: false, startCut: false, endCut: false };
+  if (!zones || zones.length === 0) return full;
+  const overlapping = segments.filter(
+    (s) => s.startEpoch != null && s.endEpoch != null && a.startEpoch != null && a.endEpoch != null && s.startEpoch <= a.endEpoch && s.endEpoch >= a.startEpoch
+  );
+  const touches =
+    (a.startLat != null && isInAnyZone(a.startLat, a.startLng, zones)) ||
+    (a.endLat != null && isInAnyZone(a.endLat, a.endLng, zones)) ||
+    overlapping.some((s) => s.trimmed);
+  if (!touches) return full;
+
+  let start = null;
+  let end = null;
+  let distance = 0;
+  for (const s of overlapping) {
+    if (s.inferred) continue; // a straight start->end guess says nothing about where the zone boundary was crossed
+    const pts = s.points.filter((p) => p[2] != null && p[2] >= a.startEpoch && p[2] <= a.endEpoch);
+    if (pts.length < 2) continue;
+    for (let i = 1; i < pts.length; i++) distance += distanceMeters(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+    if (start == null || pts[0][2] < start) start = pts[0][2];
+    if (end == null || pts[pts.length - 1][2] > end) end = pts[pts.length - 1][2];
+  }
+  if (start == null) return null;
+  return {
+    startEpoch: start,
+    endEpoch: end,
+    distanceMeters: distance,
+    partial: true,
+    startCut: start - a.startEpoch > CUT_TOLERANCE_MS,
+    endCut: a.endEpoch - end > CUT_TOLERANCE_MS,
+  };
 }
 
 // User-defined "pretend this never happened" zones (e.g. home). Unlike
@@ -203,14 +278,22 @@ function computePrefectureAggregates(data, prefectureList) {
   return byCode;
 }
 
-// Returns Map<muniCode, {code, name, prefCode, stayCount, placeCount, firstEpoch, lastEpoch}>.
-// Unlike prefectures, municipality "visited" status is based on visits only —
-// timelinePath points were never resolved to a municipality (see parseWorker).
+// Returns Map<muniCode, {code, name, prefCode, stayCount, placeCount, passCount, firstEpoch, lastEpoch}>.
+// Unlike prefectures, municipality "visited" status (and therefore 制覇率) is
+// based on visits only. Merely passing through on a train/car is tracked
+// separately as passCount (timelinePath points resolved to this
+// municipality, see worker/parseWorker.js) — shown as its own lighter
+// "通過のみ" tier on the map, never counted as 制覇.
 // See computePrefectureAggregates above for what stayCount vs. placeCount mean.
 function computeMunicipalityAggregates(data, municipalityList) {
   const byCode = new Map();
   for (const m of municipalityList) {
-    byCode.set(m.code, { code: m.code, name: m.name, prefCode: m.prefCode, stayCount: 0, placeCount: 0, firstEpoch: null, lastEpoch: null });
+    byCode.set(m.code, { code: m.code, name: m.name, prefCode: m.prefCode, stayCount: 0, placeCount: 0, passCount: 0, firstEpoch: null, lastEpoch: null });
+  }
+  for (const p of data.pathPoints) {
+    if (!p[6]) continue;
+    const entry = byCode.get(p[6]);
+    if (entry) entry.passCount += 1;
   }
   const clustersSeen = new Map(); // muniCode -> Set<clusterId>
   for (const v of data.visits) {
@@ -238,6 +321,11 @@ function computeMunicipalityAggregates(data, municipalityList) {
   return byCode;
 }
 
+// A municipality with path points but no stay at all — "通った", not "訪れた".
+function isPassOnly(entry) {
+  return !!entry && entry.stayCount === 0 && entry.passCount > 0;
+}
+
 function visitedCodes(aggregates) {
   const codes = new Set();
   for (const entry of aggregates.values()) {
@@ -254,14 +342,17 @@ function computeConquestRates(muniAggregates, municipalityList, prefectureList) 
     totalByPref.set(m.prefCode, (totalByPref.get(m.prefCode) || 0) + 1);
   }
   const visitedByPref = new Map();
+  const passOnlyByPref = new Map();
   for (const entry of muniAggregates.values()) {
     if (entry.stayCount > 0) visitedByPref.set(entry.prefCode, (visitedByPref.get(entry.prefCode) || 0) + 1);
+    else if (isPassOnly(entry)) passOnlyByPref.set(entry.prefCode, (passOnlyByPref.get(entry.prefCode) || 0) + 1);
   }
   return prefectureList
     .map((p) => {
       const total = totalByPref.get(p.code) || 0;
       const visited = visitedByPref.get(p.code) || 0;
-      return { code: p.code, name: p.name, visited, total, rate: total > 0 ? visited / total : 0 };
+      const passOnly = passOnlyByPref.get(p.code) || 0;
+      return { code: p.code, name: p.name, visited, passOnly, total, rate: total > 0 ? visited / total : 0 };
     })
     .sort((a, b) => b.rate - a.rate);
 }
@@ -272,9 +363,9 @@ function buildMunicipalityIndex(municipalityList) {
 }
 
 function municipalityName(municipalityByCode, code) {
-  if (!code) return '不明';
+  if (!code) return tr('不明', 'Unknown');
   const m = municipalityByCode && municipalityByCode.get(code);
-  return m ? m.name : '不明';
+  return m ? m.name : tr('不明', 'Unknown');
 }
 
 // Shared by the prefecture-detail ranking rows and the map pin tooltips, so
@@ -286,9 +377,17 @@ function municipalityName(municipalityByCode, code) {
 // `cacheEntry` is whatever the caller's label cache holds for this cluster:
 // null/undefined (not requested yet), { status: 'pending' }, or
 // { status: 'done'|'error', label: string|null }.
+// Detail names come from OpenStreetMap (Nominatim/Overpass) — external data —
+// so anything built from them must be escaped before it reaches innerHTML or
+// a Leaflet tooltip (which also renders HTML). formatPlaceLabel returns plain
+// text; escape at the HTML sink.
+function escapeHtml(text) {
+  return String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
 function formatPlaceLabel(muniName, cacheEntry) {
-  if (!cacheEntry || cacheEntry.status === 'pending') return `${muniName}（取得中…）`;
-  if (cacheEntry.status === 'done' && cacheEntry.label) return `${cacheEntry.label}（${muniName}）`;
+  if (!cacheEntry || cacheEntry.status === 'pending') return tr('{muni}（取得中…）', '{muni} (loading…)', { muni: muniName });
+  if (cacheEntry.status === 'done' && cacheEntry.label) return cacheEntry.label + tr('（{m}）', ' ({m})', { m: muniName });
   return muniName;
 }
 
@@ -462,7 +561,8 @@ function computeLongestTrips(data, municipalityByCode, limit = 10) {
     }));
 }
 
-const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+const DOW_LABELS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+const DOW_LABELS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // Average daily total distance, grouped by weekday (calendar days with zero
 // activity don't count toward the average for that weekday).
@@ -485,7 +585,7 @@ function computeDayOfWeekStats(data) {
     sums[dow].days += 1;
   }
 
-  return sums.map((s, i) => ({ dow: i, label: DOW_LABELS[i], avgDistance: s.days > 0 ? s.total / s.days : 0 }));
+  return sums.map((s, i) => ({ dow: i, label: tr(DOW_LABELS_JA[i], DOW_LABELS_EN[i]), avgDistance: s.days > 0 ? s.total / s.days : 0 }));
 }
 
 function computeHourlyHistogram(data) {
@@ -514,8 +614,7 @@ function computeNewlyVisitedInYear(fullAggregates, year) {
   const result = [];
   for (const entry of fullAggregates.values()) {
     if (entry.firstEpoch == null) continue;
-    const firstYear = new Date(entry.firstEpoch).getUTCFullYear();
-    if (firstYear === year) result.push(entry);
+    if (localYear(entry.firstEpoch) === year) result.push(entry);
   }
   return result.sort((a, b) => a.firstEpoch - b.firstEpoch);
 }
@@ -662,16 +761,19 @@ export {
   applyPrivacy,
   isInAnyZone,
   applyExclusionZones,
+  visibleMovePortion,
   filterByPeriod,
   filterUpToPeriod,
   computePrefectureAggregates,
   computeMunicipalityAggregates,
   computeConquestRates,
+  isPassOnly,
   visitedCodes,
   buildMunicipalityIndex,
   computeModalVisitLocation,
   municipalityName,
   formatPlaceLabel,
+  escapeHtml,
   dwellMs,
   computeDwellCapNote,
   computeClusterRanking,
@@ -683,4 +785,6 @@ export {
   computeTopDays,
   computeNewlyVisitedInYear,
   computeChronology,
+  localDateStr,
+  localYear,
 };

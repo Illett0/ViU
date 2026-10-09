@@ -9,62 +9,86 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+<!--
+  Static text is Japanese in the markup; English lives in data-en (text),
+  data-en-html (markup), data-en-title / data-en-aria-label. See i18n.mjs.
+-->
 <div id="app">
 
   <header id="app-header">
     <div class="header-left">
       <img src="icon.png" alt="" id="app-icon" />
       <h1>ViU</h1>
-      <button id="btn-open-file" class="btn">ファイルを開く</button>
+      <button id="btn-open-file" class="btn" data-en="Open file">ファイルを開く</button>
     </div>
 
-    <nav id="breadcrumb" aria-label="パンくずリスト"></nav>
+    <div id="address-bar" class="address-bar">
+      <nav id="breadcrumb" aria-label="パンくずリスト" data-en-aria-label="Breadcrumb"></nav>
+      <input id="address-input" type="text" role="combobox" aria-expanded="false" aria-controls="address-results" aria-autocomplete="list"
+        placeholder="都道府県・市区町村・地名・日付（2024-01-20）で移動" data-en-placeholder="Go to a prefecture, municipality, place or date (2024-01-20)"
+        aria-label="移動先を検索" data-en-aria-label="Search for a place or date" hidden />
+      <ul id="address-results" class="history-menu address-results" role="listbox" hidden></ul>
+      <button id="btn-search" class="btn btn-icon btn-search" title="検索して移動（Ctrl+L）" data-en-title="Search and go (Ctrl+L)" aria-label="検索して移動" data-en-aria-label="Search and go" hidden>&#128269;</button>
+    </div>
 
     <div class="header-right">
       <div id="period-filter" class="period-filter" hidden>
-        <label>年 <select id="filter-year"><option value="">すべて</option></select></label>
-        <label>月 <select id="filter-month"><option value="">すべて</option></select></label>
+        <label><span data-en="Year">年</span> <select id="filter-year"><option value="" data-en="All">すべて</option></select></label>
+        <label><span data-en="Month">月</span> <select id="filter-month"><option value="" data-en="All">すべて</option></select></label>
       </div>
       <div id="cluster-filter" class="cluster-filter" hidden>
-        <label title="近接する滞在地点をまとめる距離のしきい値">
-          クラスタ距離 <span id="cluster-threshold-label">50m</span>
+        <label title="近接する滞在地点をまとめる距離のしきい値" data-en-title="Distance within which nearby stay points are merged into one">
+          <span data-en="Cluster distance">クラスタ距離</span> <span id="cluster-threshold-label">50m</span>
           <input type="range" id="cluster-threshold" min="20" max="200" step="10" value="50" />
         </label>
       </div>
       <div class="history-nav">
-        <button id="btn-back" class="btn btn-icon" title="戻る" disabled>&#8592;</button>
-        <button id="btn-forward" class="btn btn-icon" title="進む" disabled>&#8594;</button>
+        <button id="btn-back" class="btn btn-icon" title="戻る" data-en-title="Back" disabled>&#8592;</button>
+        <button id="btn-forward" class="btn btn-icon" title="進む" data-en-title="Forward" disabled>&#8594;</button>
+        <button id="btn-history" class="btn btn-icon btn-history" title="閲覧履歴" data-en-title="History" aria-label="閲覧履歴" data-en-aria-label="History" aria-haspopup="menu" aria-expanded="false" aria-controls="history-menu" disabled>&#9662;</button>
+        <ul id="history-menu" class="history-menu" role="menu" aria-label="閲覧履歴" data-en-aria-label="History" hidden></ul>
       </div>
-      <button id="btn-settings" class="btn" hidden>&#9881; 設定</button>
-      <button id="btn-privacy" class="btn btn-privacy" title="プライバシー保護モードの切り替え">
+      <div class="bookmark-nav">
+        <button id="btn-bookmarks" class="btn btn-icon" title="ブックマーク" data-en-title="Bookmarks" aria-label="ブックマーク" data-en-aria-label="Bookmarks" aria-expanded="false" aria-controls="bookmark-panel" disabled>&#9734;</button>
+        <div id="bookmark-panel" class="history-menu bookmark-panel" role="dialog" aria-label="ブックマーク" data-en-aria-label="Bookmarks" hidden>
+          <form id="bookmark-form" class="bookmark-form">
+            <input id="bookmark-name" type="text" maxlength="80" aria-label="ブックマーク名" data-en-aria-label="Bookmark name" />
+            <button type="submit" class="btn btn-primary btn-small" data-en="Add">追加</button>
+          </form>
+          <ul id="bookmark-list" class="bookmark-list"></ul>
+        </div>
+      </div>
+      <button id="btn-settings" class="btn" hidden data-en="&#9881; Settings">&#9881; 設定</button>
+      <button id="btn-privacy" class="btn btn-privacy" title="プライバシー保護モードの切り替え" data-en-title="Toggle privacy mode">
         <span id="privacy-icon">&#128274;</span>
-        <span id="privacy-label">プライバシーモード ON</span>
+        <span id="privacy-label"><span class="privacy-label-prefix">プライバシーモード </span>ON</span>
       </button>
     </div>
   </header>
 
   <div id="tabs" hidden>
-    <button class="tab-btn active" data-tab="map">県制覇マップ</button>
-    <button class="tab-btn" data-tab="route" id="tab-route">経路マップ</button>
-    <button class="tab-btn" data-tab="chronology">年表</button>
-    <button class="tab-btn" data-tab="stats">移動統計</button>
+    <button class="tab-btn active" data-tab="map" data-en="Coverage Map">県制覇マップ</button>
+    <button class="tab-btn" data-tab="route" id="tab-route" data-en="Route Map">経路マップ</button>
+    <button class="tab-btn" data-tab="chronology" data-en="Chronology">年表</button>
+    <button class="tab-btn" data-tab="stats" data-en="Travel Stats">移動統計</button>
   </div>
 
   <main id="app-main">
 
     <section id="welcome-screen">
-      <h2>Googleタイムラインの位置履歴を読み込む</h2>
-      <p>Googleマップからエクスポートしたタイムライン(JSON)ファイルを開いてください。</p>
-      <button id="btn-open-file-main" class="btn btn-primary">ファイルを選択</button>
-      <button id="btn-photos-only" class="btn">タイムラインなしで写真だけ見る</button>
-      <p>Googleタイムラインのデータがなくても、位置情報付きの写真だけを地図にプロットして見られます。</p>
+      <h2 data-en="Load your Google Timeline location history">Googleタイムラインの位置履歴を読み込む</h2>
+      <p data-en="Open the Timeline (JSON) file you exported from Google Maps.">Googleマップからエクスポートしたタイムライン(JSON)ファイルを開いてください。</p>
+      <button id="btn-open-file-main" class="btn btn-primary" data-en="Choose file">ファイルを選択</button>
+      <button id="btn-photos-only" class="btn" data-en="View photos only, without a timeline">タイムラインなしで写真だけ見る</button>
+      <p data-en="No Google Timeline data? You can still plot just your geotagged photos on the map.">Googleタイムラインのデータがなくても、位置情報付きの写真だけを地図にプロットして見られます。</p>
       <div id="recent-files-section" hidden>
-        <h3>最近使ったファイル</h3>
+        <h3 data-en="Recent files">最近使ったファイル</h3>
         <ul id="recent-files-list" class="recent-files-list"></ul>
+        <button id="btn-delete-all-data-welcome" class="btn btn-danger btn-small" data-en="Delete all saved data">保存データをすべて削除</button>
       </div>
       <details class="export-guide">
-        <summary>タイムラインファイルの入手方法（お持ちでない場合）</summary>
-        <ol>
+        <summary data-en="How to get your Timeline file (if you don't have one)">タイムラインファイルの入手方法（お持ちでない場合）</summary>
+        <ol data-en-html="&lt;li&gt;In the Google Maps app on your phone, or from the &lt;a href=&quot;https://www.google.com/maps/timeline&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Google Timeline&lt;/a&gt; settings, choose &amp;quot;Export Timeline data&amp;quot; (Google account settings &amp;gt; Location History &amp;gt; Export Timeline data).&lt;/li&gt;&lt;li&gt;Open the downloaded JSON file (it can be tens of MB) as-is with &amp;quot;Choose file&amp;quot;. No conversion or splitting is needed.&lt;/li&gt;">
           <li>スマートフォンのGoogleマップアプリ、または<a href="https://www.google.com/maps/timeline" target="_blank" rel="noopener">Googleタイムライン</a>の設定画面から「データのエクスポート」を行います（Googleアカウントの設定 &gt; ロケーション履歴 &gt; タイムラインデータのエクスポート）。</li>
           <li>ダウンロードされたJSONファイル（数十MBになることがあります）をそのまま「ファイルを選択」で開けます。事前の変換・分割は不要です。</li>
         </ol>
@@ -72,7 +96,7 @@
     </section>
 
     <section id="progress-screen" hidden>
-      <h2>読み込み中...</h2>
+      <h2 data-en="Loading...">読み込み中...</h2>
       <div class="progress-bar-track">
         <div id="progress-bar-fill" class="progress-bar-fill"></div>
       </div>
@@ -80,34 +104,46 @@
     </section>
 
     <section id="privacy-notice-screen" hidden>
-      <h2>プライバシーに関するご注意</h2>
-      <p class="privacy-notice-text">
+      <h2 data-en="A note on privacy">プライバシーに関するご注意</h2>
+      <p class="privacy-notice-text" data-en="On the next screen you can mark places you don't want others to see, such as your home or workplace, as &quot;exclusion zones&quot;. If you are screen sharing or recording, take care not to expose location information.">
         このあとの画面で、ご自宅や職場など人に見られたくない場所を「除外ゾーン」として
         設定します。画面共有や録画をしている場合は、位置情報が映り込まないようご注意ください。
       </p>
-      <button id="btn-privacy-notice-continue" class="btn btn-primary">続ける</button>
+      <button id="btn-privacy-notice-continue" class="btn btn-primary" data-en="Continue">続ける</button>
     </section>
 
     <section id="map-screen" hidden>
       <div id="map-panel">
         <div id="leaflet-map"></div>
-        <div id="photos-only-banner" class="badge photos-only-banner" hidden>タイムラインデータがないため、写真の位置情報のみ表示しています。タイムラインを読み込むには右上の「ファイルを開く」から。</div>
+        <div id="photos-only-banner" class="badge photos-only-banner" hidden data-en="No timeline data is loaded, so only photo locations are shown. To load a timeline, use &quot;Open file&quot; at the top.">タイムラインデータがないため、写真の位置情報のみ表示しています。タイムラインを読み込むには右上の「ファイルを開く」から。</div>
         <div id="prefecture-count-badge" class="badge"></div>
         <div id="island-badge" class="badge island-badge" hidden></div>
         <div id="map-controls" class="badge map-controls">
           <div class="granularity-toggle">
-            <button class="granularity-btn active" data-granularity="prefecture">都道府県</button>
-            <button class="granularity-btn" data-granularity="municipality">市区町村</button>
+            <button class="granularity-btn active" data-granularity="prefecture" data-en="Prefectures">都道府県</button>
+            <button class="granularity-btn" data-granularity="municipality" data-en="Municipalities">市区町村</button>
           </div>
-          <button id="btn-timelapse-play" class="btn btn-icon" title="タイムラプス再生">&#9654;</button>
-          <button id="btn-timelapse-reset" class="btn btn-icon" title="リセット">&#8634;</button>
-          <button id="btn-export-png" class="btn btn-icon" title="PNGとして保存">&#128190;</button>
-          <button id="btn-photo-toggle" class="btn btn-icon" title="写真レイヤー">&#128247;</button>
+          <button id="btn-timelapse-play" class="btn btn-icon" title="タイムラプス再生" data-en-title="Play timelapse">&#9654;</button>
+          <button id="btn-timelapse-reset" class="btn btn-icon" title="リセット" data-en-title="Reset">&#8634;</button>
+          <button id="btn-export-png" class="btn btn-icon" title="PNGとして保存" data-en-title="Save as PNG">&#128190;</button>
+          <button id="btn-photo-toggle" class="btn btn-icon" title="写真レイヤー" data-en-title="Photo layer">&#128247;</button>
+          <button id="btn-compare" class="btn btn-icon" title="2つの期間を並べて比較" data-en-title="Compare two periods side by side" aria-pressed="false">&#8644;</button>
         </div>
+        <div id="map-period-badge" class="badge compare-period-badge" hidden></div>
         <div id="timelapse-overlay" class="timelapse-overlay" hidden>
           <div id="timelapse-period" class="timelapse-period"></div>
           <div id="timelapse-count" class="timelapse-count"></div>
         </div>
+      </div>
+      <div id="compare-panel" class="compare-panel" hidden>
+        <div id="compare-map"></div>
+        <div class="badge compare-period-badge compare-controls">
+          <label><span data-en="Compare with">比較する期間</span>
+            <select id="compare-year" aria-label="比較する年" data-en-aria-label="Year to compare"></select>
+            <select id="compare-month" aria-label="比較する月" data-en-aria-label="Month to compare"></select>
+          </label>
+        </div>
+        <div id="compare-count-badge" class="badge compare-count-badge"></div>
       </div>
       <aside id="detail-panel">
         <div id="detail-panel-content"></div>
@@ -115,14 +151,32 @@
     </section>
 
     <div id="day-view-overlay" class="day-view-overlay" hidden>
-      <div id="day-view-panel">
+      <div id="day-view-panel" role="dialog" aria-modal="true" aria-labelledby="day-view-title" aria-describedby="day-view-summary">
         <div id="day-view-header">
-          <h2 id="day-view-title"></h2>
-          <button id="btn-day-view-close" class="btn">閉じる</button>
+          <div class="day-view-nav">
+            <button id="btn-day-view-prev" class="btn btn-icon" aria-label="前の記録日（←キー）" title="前の記録日（←）" data-en-aria-label="Previous recorded day (← key)" data-en-title="Previous recorded day (←)">&#8249;</button>
+            <h2 id="day-view-title" tabindex="-1"></h2>
+            <button id="btn-day-view-next" class="btn btn-icon" aria-label="次の記録日（→キー）" title="次の記録日（→）" data-en-aria-label="Next recorded day (→ key)" data-en-title="Next recorded day (→)">&#8250;</button>
+          </div>
+          <p id="day-view-summary" class="day-view-summary"></p>
+          <button id="btn-day-view-photos" class="btn btn-icon" aria-pressed="true" title="この日の写真を表示/非表示" data-en-title="Show/hide this day's photos" hidden>&#128247; <span id="day-view-photo-count"></span></button>
+          <button id="btn-day-view-close" class="btn" aria-label="閉じる（Escキー）" title="閉じる（Esc）" data-en-aria-label="Close (Esc key)" data-en-title="Close (Esc)" data-en="Close">閉じる</button>
         </div>
-        <div id="day-view-map"></div>
-        <div id="day-view-message" class="route-message" hidden></div>
-        <div id="day-view-legend" class="badge route-legend"></div>
+        <div id="day-view-body">
+          <div id="day-view-map-wrap">
+            <div id="day-view-map" role="region" aria-label="この日の経路地図。内容は右のタイムラインと同じです" data-en-aria-label="Route map for this day. Same content as the timeline on the right"></div>
+            <div id="day-view-message" class="route-message" role="status" hidden></div>
+            <ul id="day-view-legend" class="badge route-legend day-view-legend" aria-label="凡例" data-en-aria-label="Legend"></ul>
+          </div>
+          <section id="day-view-timeline-wrap" aria-labelledby="day-view-timeline-heading">
+            <h3 id="day-view-timeline-heading" data-en="Timeline">タイムライン</h3>
+            <ol id="day-view-timeline" class="day-view-timeline"></ol>
+            <section id="day-view-photos" aria-labelledby="day-view-photos-heading" hidden>
+              <h3 id="day-view-photos-heading" data-en="Photos from this day">この日の写真</h3>
+              <div id="day-view-photo-gallery"></div>
+            </section>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -132,14 +186,15 @@
         <div id="route-message" class="route-message" hidden></div>
         <div id="route-legend" class="badge route-legend"></div>
         <div id="route-controls" class="badge route-controls">
-          <button id="btn-route-photo-toggle" class="btn btn-icon" title="写真レイヤー">&#128247;</button>
+          <button id="btn-route-photo-toggle" class="btn btn-icon" title="写真レイヤー" data-en-title="Photo layer">&#128247;</button>
         </div>
       </div>
     </section>
 
     <section id="chronology-screen" hidden>
+      <div id="calendar-section" class="calendar-section"></div>
       <div id="chronology-toolbar">
-        <label><input type="checkbox" id="chronology-include-muni" /> 市区町村の初訪問も含める</label>
+        <label><input type="checkbox" id="chronology-include-muni" /> <span data-en="Include first visits to municipalities">市区町村の初訪問も含める</span></label>
       </div>
       <div id="chronology-content"></div>
     </section>
@@ -150,17 +205,17 @@
 
     <section id="settings-screen" hidden>
       <div id="settings-header">
-        <h2>設定 — 除外ゾーン</h2>
-        <button id="btn-settings-close" class="btn">閉じる</button>
+        <h2 data-en="Settings — Exclusion zones">設定 — 除外ゾーン</h2>
+        <button id="btn-settings-close" class="btn" data-en="Close">閉じる</button>
       </div>
       <div id="settings-import-banner" class="settings-import-banner" hidden>
-        <p>
+        <p data-en="Your data is loaded. Before you start browsing, you can register places you don't want others to see, such as your home or workplace, as exclusion zones (you can change this any time from &quot;Settings&quot;).">
           データを読み込みました。ブラウズを始める前に、自宅・職場など人に見られたくない場所を
           除外ゾーンとして登録できます（あとで「設定」からいつでも変更できます）。
         </p>
-        <button id="btn-settings-goto-map" class="btn btn-primary">マップへ &#8594;</button>
+        <button id="btn-settings-goto-map" class="btn btn-primary" data-en="To the map &#8594;">マップへ &#8594;</button>
       </div>
-      <p class="settings-intro">
+      <p class="settings-intro" data-en="Each circle is an area treated as if it never happened: it is always left out of map pins, the place ranking, routes and visit lists (prefecture/municipality visited status and totals such as distance are not affected).">
         指定した円の範囲は「なかったことにする」エリアとして、地図のピン・
         滞在場所ランキング・経路・訪問一覧から常に除外されます（都道府県/
         市区町村の訪問判定や合計距離などの集計値には影響しません）。
@@ -171,57 +226,71 @@
       <div id="settings-body">
         <div id="zone-map-panel">
           <div id="zone-map"></div>
-          <p class="settings-hint">地図をクリックして中心を指定してください。</p>
+          <p class="settings-hint" data-en="Click the map to set the center.">地図をクリックして中心を指定してください。</p>
         </div>
         <div id="zone-side-panel">
           <div id="zone-pending" hidden>
-            <h3>新しいゾーン</h3>
-            <label>半径 <span id="zone-radius-label">300m</span>
+            <h3 data-en="New zone">新しいゾーン</h3>
+            <label><span data-en="Radius">半径</span> <span id="zone-radius-label">300m</span>
               <input type="range" id="zone-radius" min="100" max="3000" step="50" value="300" />
             </label>
             <div class="zone-pending-actions">
-              <button id="btn-zone-confirm" class="btn btn-primary">追加</button>
-              <button id="btn-zone-cancel" class="btn">キャンセル</button>
+              <button id="btn-zone-confirm" class="btn btn-primary" data-en="Add">追加</button>
+              <button id="btn-zone-cancel" class="btn" data-en="Cancel">キャンセル</button>
             </div>
           </div>
-          <h3>登録済みのゾーン</h3>
+          <h3 data-en="Registered zones">登録済みのゾーン</h3>
           <ul id="zone-list" class="zone-list"></ul>
           <p id="zone-hidden-count" class="empty-note"></p>
         </div>
       </div>
 
+      <div id="settings-language-section" class="settings-cache-section">
+        <h3><span data-en="Language">表示言語</span> / Language</h3>
+        <select id="language-select" aria-label="表示言語 / Language">
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+
       <div id="settings-cache-section" class="settings-cache-section">
-        <h3>キャッシュ</h3>
-        <p class="settings-cache-text">
-          市区町村判定・クラスタリング結果とNominatimの地名取得結果はディスクにキャッシュされ、
-          次回以降の読み込みを高速化しています。挙動がおかしい場合や、ディスク容量を空けたい場合は
-          クリアしてください（除外ゾーンや最近使ったファイルの履歴は削除されません）。
+        <h3 data-en="Cache &amp; saved data">キャッシュ・保存データ</h3>
+        <p class="settings-cache-text" data-en="Municipality matching and clustering results, place names (Nominatim/Overpass) and photo thumbnails are cached only in this PC's app data folder to speed up later loads. Clear them if something behaves oddly or to free disk space (exclusion zones and the recent-files history are kept).">
+          市区町村判定・クラスタリング結果と地名取得結果（Nominatim/Overpass）、写真のサムネイルは、
+          このPCのアプリデータフォルダにのみキャッシュされ、次回以降の読み込みを高速化しています。
+          挙動がおかしい場合や、ディスク容量を空けたい場合はクリアしてください（除外ゾーンや最近使ったファイルの履歴は削除されません）。
         </p>
-        <button id="btn-clear-cache" class="btn">キャッシュをクリア</button>
+        <button id="btn-clear-cache" class="btn" data-en="Clear cache">キャッシュをクリア</button>
         <p id="cache-clear-result" class="empty-note" hidden></p>
+        <p class="settings-cache-text settings-delete-all-text" data-en="Deletes everything ViU has saved on this PC, including the recent-files history, in-app backups (copies of loaded timelines), exclusion zones, bookmarks and the linked photo folder. Use this before giving away the PC or uninstalling the app. Your original timeline file and photos are not deleted.">
+          最近使ったファイルの履歴・アプリ内バックアップ（読み込んだタイムラインのコピー）・除外ゾーン・ブックマーク・写真フォルダの連携設定を含め、
+          ViUがこのPCに保存したデータをすべて削除します。PCを手放す・アプリをアンインストールする前などにご利用ください。
+          元のタイムラインファイルや写真そのものは削除されません。
+        </p>
+        <button id="btn-delete-all-data" class="btn btn-danger" data-en="Delete all data">すべてのデータを削除</button>
       </div>
 
       <div id="settings-photo-section" class="settings-photo-section">
-        <h3>写真連携</h3>
-        <p class="settings-photo-text">
+        <h3 data-en="Photo integration">写真連携</h3>
+        <p class="settings-photo-text" data-en="Link a folder of geotagged photos to overlay where they were taken on the Coverage Map and Route Map. Everything is read locally and nothing is sent anywhere. The photo layer is disabled while privacy mode is on.">
           位置情報付きの写真があるフォルダを連携すると、撮影地点を制覇マップ・経路マップに重ねて表示できます。
           読み取りはすべてローカルで行われ、外部には送信されません。プライバシーモードON時は写真レイヤー自体が無効になります。
         </p>
-        <p id="photo-linked-folder" class="empty-note">未連携</p>
+        <p id="photo-linked-folder" class="empty-note"></p>
         <div class="settings-photo-actions">
-          <button id="btn-link-photo-folder" class="btn">写真フォルダを選択</button>
-          <button id="btn-rescan-photo-folder" class="btn" hidden>再スキャン</button>
+          <button id="btn-link-photo-folder" class="btn" data-en="Choose photo folder">写真フォルダを選択</button>
+          <button id="btn-rescan-photo-folder" class="btn" hidden data-en="Rescan">再スキャン</button>
         </div>
         <details class="export-guide">
-          <summary>Googleフォトからの写真データの準備方法</summary>
-          <p>
+          <summary data-en="Preparing photo data from Google Photos">Googleフォトからの写真データの準備方法</summary>
+          <p data-en-html="Photos with Exif GPS tags can be used by choosing their folder as-is. For photos without location data, export only &amp;quot;Google Photos&amp;quot; with &lt;a href=&quot;https://takeout.google.com/&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Google Takeout&lt;/a&gt;. Under &lt;code&gt;Takeout/Google Photos/&lt;/code&gt; each photo comes paired with a JSON file holding its location (such as &lt;code&gt;photo.jpg.supplemental-metadata.json&lt;/code&gt;); choose that folder with &amp;quot;Choose photo folder&amp;quot; below.">
             Exif GPSタグ付きの写真であればフォルダをそのまま選択できます。位置情報がない写真は、
             <a href="https://takeout.google.com/" target="_blank" rel="noopener">Google Takeout</a>で
             「Googleフォト」のみを選択してエクスポートしてください。<code>Takeout/Google フォト/</code>以下に
             写真本体と位置情報付きのJSONファイル（<code>写真名.jpg.supplemental-metadata.json</code>など）が
             ペアで出力されるので、そのフォルダを下の「写真フォルダを選択」から指定してください。
           </p>
-          <p>実際の位置情報を含む個人データなので取り扱いにはご注意を。処理はローカル完結で外部送信はありません。</p>
+          <p data-en="This is personal data containing real locations, so handle it with care. Processing is fully local and nothing is sent anywhere.">実際の位置情報を含む個人データなので取り扱いにはご注意を。処理はローカル完結で外部送信はありません。</p>
         </details>
         <div id="photo-scan-progress" class="progress-bar-track" hidden>
           <div id="photo-scan-progress-fill" class="progress-bar-fill"></div>
@@ -234,7 +303,7 @@
 
     <div id="photo-lightbox-overlay" class="photo-lightbox-overlay" hidden>
       <div id="photo-lightbox-panel">
-        <button id="btn-photo-lightbox-close" class="btn btn-icon photo-lightbox-close" title="閉じる">&times;</button>
+        <button id="btn-photo-lightbox-close" class="btn btn-icon photo-lightbox-close" title="閉じる" data-en-title="Close">&times;</button>
         <img id="photo-lightbox-img" alt="" />
         <p id="photo-lightbox-caption"></p>
       </div>
