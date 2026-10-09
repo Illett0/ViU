@@ -12,7 +12,7 @@ import { resetLabelQueue } from './labels.mjs';
 import { localizePrefectureNames, populateYearOptions, recluster, refreshRecentFilesList, wireLoading } from './loading.mjs';
 import { initPhotoLink, showUnlinkedPhotoFolder, wirePhotos } from './photos.mjs';
 import { renderBreadcrumb, renderMapTab } from './mapTab.mjs';
-import { renderRouteTab, wireRouteTab } from './routeTab.mjs';
+import { openDayView, renderRouteTab, wireRouteTab } from './routeTab.mjs';
 import { stopTimelapse, wireTimelapse } from './timelapse.mjs';
 import { renderSettingsScreen, wireSettings } from './settings.mjs';
 import { installTestHooks } from './testHooks.mjs';
@@ -130,6 +130,7 @@ export function render() {
       topDays: computeTopDays(derived.periodData, 5),
       dwellCapNote: computeDwellCapNote(derived.periodData),
       conquestRates: computeConquestRates(derived.muniAggregates, state.raw.municipalities, state.raw.prefectures),
+      onDayClick: state.privacy ? null : (dateStr) => openDayView(dateStr),
       onConquestClick: (row) => {
         setGranularity('municipality');
         navigateTo(state, 'prefecture', { code: row.code });
@@ -182,8 +183,17 @@ export function renderChronologyTab(derived) {
       setGranularity('prefecture');
       navigateTo(state, 'prefecture', { code: ev.code });
     } else {
+      // A municipality has no page of its own; its "first visit" leads to the
+      // stay point of that first visit. Exclusion zones still apply (falls
+      // back to the prefecture if every visit there is zoned out).
       setGranularity('municipality');
+      const first = derived.displayData.visits
+        .filter((v) => v.muniCode === ev.code)
+        .reduce((best, v) => (!best || v.startEpoch < best.startEpoch ? v : best), null);
       navigateTo(state, 'prefecture', { code: ev.prefCode });
+      if (first) {
+        navigateTo(state, 'place', state.privacy ? { clusterId: null, muniCode: ev.code, code: ev.prefCode } : { clusterId: first.clusterId, muniCode: null, code: ev.prefCode });
+      }
     }
     render();
   });

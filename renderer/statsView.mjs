@@ -185,9 +185,16 @@ export function renderStats(
     dwellCapNote,
     conquestRates,
     onConquestClick,
+    onDayClick,
   }
 ) {
   container.innerHTML = '';
+  // Dates become links to that day's route view when the caller allows it
+  // (not under privacy mode, where the route views are off).
+  const dayLink = (dateStr) =>
+    onDayClick && dateStr
+      ? `<button type="button" class="link-btn" data-day="${dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: dateStr })}">${dateStr}</button>`
+      : dateStr || '-';
 
   const grid = document.createElement('div');
   grid.className = 'stats-grid';
@@ -272,7 +279,7 @@ export function renderStats(
       longestTrips
         .map(
           (t, i) =>
-            `<tr><td>${i + 1}</td><td>${t.dateStr || '-'}</td><td>${modeLabel(t.mode)}</td><td>${km(t.distanceMeters)} km</td><td>${t.startMuniName}</td><td>${t.endMuniName}</td></tr>`
+            `<tr><td>${i + 1}</td><td>${dayLink(t.dateStr)}</td><td>${modeLabel(t.mode)}</td><td>${km(t.distanceMeters)} km</td><td>${t.startMuniName}</td><td>${t.endMuniName}</td></tr>`
         )
         .join('') +
       '</tbody>';
@@ -322,7 +329,7 @@ export function renderStats(
   } else {
     const list = document.createElement('ul');
     list.className = 'rank-list';
-    list.innerHTML = topDays.map((d, i) => `<li><span>${i + 1}. ${d.dateStr}</span><span class="rank-count">${km(d.distance)} km</span></li>`).join('');
+    list.innerHTML = topDays.map((d, i) => `<li><span>${i + 1}. ${dayLink(d.dateStr)}</span><span class="rank-count">${km(d.distance)} km</span></li>`).join('');
     container.appendChild(list);
   }
 
@@ -378,6 +385,10 @@ export function renderStats(
       )
       .join('');
     container.appendChild(list);
+  }
+
+  if (onDayClick) {
+    container.querySelectorAll('[data-day]').forEach((btn) => btn.addEventListener('click', () => onDayClick(btn.dataset.day)));
   }
 
   if (dwellCapNote && dwellCapNote.cappedCount > 0) {

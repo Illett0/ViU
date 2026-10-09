@@ -8,7 +8,8 @@ import { applyPrivacy, applyExclusionZones, municipalityName, computeModalVisitL
 import { dayViewLayerRef, dayViewMarkerLayerRef, dayViewPhotoLayerRef, el, routeLayerRef, routePhotoLayerRef, state, ui } from './context.mjs';
 import { getVisiblePhotos, openPhotoLightbox, resolvePlaceName, photosForDay } from './photos.mjs';
 import { enqueueLabelFetch, onPlaceLabelUpdated } from './labels.mjs';
-import { getDerived } from './app.mjs';
+import { getDerived, render } from './app.mjs';
+import { navigateTo } from './state.mjs';
 import { numberLocale, tr } from './i18n.mjs';
 
 // Which transport modes are currently toggled off in the route map legend —
@@ -229,7 +230,11 @@ function renderTimelineList() {
           `<span class="day-tl-title" data-cluster-id="${v.clusterId ?? ''}">${escapeHtml(placeNameFor(v))}</span>` +
           `<span class="day-tl-sub">${tr('滞在 {d}', 'Stayed {d}', { d: formatDuration(dwellMs(v)) })}</span>` +
           `<span class="visually-hidden">${tr('（地図上の{n}番の地点）', ' (point {n} on the map)', { n: item.number })}</span></span>` +
-          `</button></li>`
+          `</button>` +
+          (v.clusterId != null
+            ? `<button type="button" class="link-btn day-tl-link" data-index="${i}" aria-label="${escapeHtml(tr('{name} の詳細を開く', 'Open details for {name}', { name: placeNameFor(v) }))}">${tr('この地点の詳細 →', 'Place details →')}</button>`
+            : '') +
+          `</li>`
         );
       }
       const a = item.activity;
@@ -257,6 +262,19 @@ function renderTimelineList() {
     btn.addEventListener('blur', () => highlightItem(item, false));
     btn.addEventListener('click', () => focusItemOnMap(item));
   });
+  el.dayViewTimeline.querySelectorAll('.day-tl-link').forEach((btn) => {
+    const v = items[Number(btn.dataset.index)].visit;
+    btn.addEventListener('click', () => openPlaceFromDayView(v));
+  });
+}
+
+// Follows a stay in the day view to that stay point's own detail panel on
+// the coverage map — the same place view its ranking row opens.
+function openPlaceFromDayView(v) {
+  closeDayView();
+  state.tab = 'map';
+  navigateTo(state, 'place', { clusterId: v.clusterId, muniCode: null, code: v.prefCode });
+  render();
 }
 
 // Highlight = the stop's badge gets a dark ring / the move's casing turns
