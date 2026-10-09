@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install               # install dependencies (scripts are blocked by .npmrc's ignore-scripts=true)
 npm run setup              # run only the allow-listed install scripts (lavamoat.allowScripts in package.json) — needed once after install/dependency changes, e.g. for electron-winstaller
 npm start                 # run the app (electron .) — opens a native file-picker dialog on launch
-npm run dist               # electron-builder: produces dist/ViU Setup <version>.exe (Windows NSIS, x64 only)
+npm run dist               # electron-builder for the host OS: Windows → dist/ViU Setup <version>.exe (NSIS, x64; the only distributed build). macOS → .dmg (arm64+x64), Linux → AppImage — configured for issue #16 but untested (no hardware); mac builds only on macOS
 npm run fetch:boundaries   # regenerate data/municipalities.geojson from the 1% simplification (47 files, requires network) — one-off, not run in normal dev
 npm run test:e2e           # runs every test/e2e/*.spec.js file (test/e2e/run-all.js) via Playwright's _electron API against a real Electron process
 ```

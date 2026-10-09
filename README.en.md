@@ -12,6 +12,10 @@ No Node.js knowledge is required. Download the latest `ViU Setup <version>.exe` 
 
 Because the executable is unsigned, Windows SmartScreen may show a warning ("Windows protected your PC") on first launch. Click "More info" → "Run anyway" to start it. Administrator rights are not required (the app is installed into a per-user folder). The launch right after an install (or update) finishes starts minimized and flashes its taskbar button, so it does not steal focus from whatever other app you are working in.
 
+### Using it on Mac or Linux (unverified)
+
+Only the Windows build is distributed. Build settings for Mac (`.dmg` for Apple Silicon and Intel) and Linux (`AppImage`) are included, but the developer has no machines to test on, so **they are unverified**. To try it on a Mac, start it from source with `npm start` (see "Quick start" below), or build it on the Mac with `npm run dist`. The app is not signed or notarized, so on first launch right-click the app in Finder and choose "Open". If something doesn't work, please let us know in an [Issue](../../issues).
+
 ## Quick start (for developers)
 
 To run directly from source, you need Node.js (a version that can run Electron 43.x).
@@ -174,6 +178,8 @@ npm run dist
 ```
 
 `ViU Setup <version>.exe` (an NSIS installer that also creates desktop/Start menu shortcuts) is generated in the `dist/` folder. Because the code is not signed, SmartScreen shows a warning on first launch on the target PC. Obtaining a code signing certificate would remove this warning, but it is not essential for personal use or small-scale distribution.
+
+Running `npm run dist` on a Mac produces a `.dmg`, and on Linux an `AppImage` (unverified; the Mac build can only be made on a Mac).
 
 ## Verification
 

@@ -36,6 +36,7 @@
     "compression": "maximum",
     "electronLanguages": [
       "ja",
+      "en",
       "en-US"
     ],
     "directories": {
@@ -61,6 +62,26 @@
             "x64"
           ]
         }
+      ]
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.travel",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "target": [
+        "AppImage"
       ]
     },
     "nsis": {

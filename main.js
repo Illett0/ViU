@@ -94,7 +94,8 @@ function createWindow() {
     width: 1280,
     height: 860,
     show: false,
-    icon: path.join(__dirname, 'build', 'icon.ico'),
+    // macOS takes the icon from the app bundle (build.mac.icon) and ignores this.
+    icon: path.join(__dirname, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
