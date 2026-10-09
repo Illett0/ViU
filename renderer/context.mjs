@@ -54,6 +54,8 @@ export const el = {
   breadcrumb: document.getElementById('breadcrumb'),
   btnBack: document.getElementById('btn-back'),
   btnForward: document.getElementById('btn-forward'),
+  btnHistory: document.getElementById('btn-history'),
+  historyMenu: document.getElementById('history-menu'),
   btnSettings: document.getElementById('btn-settings'),
   btnPrivacy: document.getElementById('btn-privacy'),
   privacyLabel: document.getElementById('privacy-label'),

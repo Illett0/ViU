@@ -16,6 +16,7 @@ import { openDayView, renderRouteTab, wireRouteTab } from './routeTab.mjs';
 import { stopTimelapse, wireTimelapse } from './timelapse.mjs';
 import { renderSettingsScreen, wireSettings } from './settings.mjs';
 import { installTestHooks } from './testHooks.mjs';
+import { updateHistoryButton, wireHistoryMenu } from './historyMenu.mjs';
 import { applyStaticTranslations, setLanguage, tr } from './i18n.mjs';
 
 export function getDerived() {
@@ -50,6 +51,7 @@ export function render() {
 
   el.btnBack.disabled = !canGoBack(state);
   el.btnForward.disabled = !canGoForward(state);
+  updateHistoryButton();
 
   el.tabRoute.disabled = state.privacy;
   if (state.privacy && state.tab === 'route') state.tab = 'map';
@@ -336,6 +338,7 @@ wirePhotos();
 wireRouteTab();
 wireTimelapse();
 wireSettings();
+wireHistoryMenu();
 installTestHooks();
 // Static markup is visible (and clickable) before this module graph has run;
 // style.css keeps #app hidden until here so nobody sees the untranslated page
