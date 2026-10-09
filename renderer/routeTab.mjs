@@ -120,6 +120,26 @@ function dayDisplayData() {
 }
 
 // Every date that has something to show, for 前/次の記録日 navigation.
+// Records per day for the calendar (issue #37): the same day set the day
+// view steps through (route segments, plus stays and photos outside privacy
+// mode — see datesWithData below), weighted by how many there are.
+export function dayRecordCounts(displayData) {
+  const counts = new Map();
+  const add = (d) => {
+    if (d) counts.set(d, (counts.get(d) || 0) + 1);
+  };
+  for (const s of displayData.pathSegments || []) add(s.dateStr);
+  if (!state.privacy) {
+    for (const v of displayData.visits || []) add(v.dateStr);
+    for (const p of state.photos) {
+      if (p.takenAtMs == null) continue;
+      const d = new Date(p.takenAtMs);
+      add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+  }
+  return counts;
+}
+
 function datesWithData(displayData) {
   const dates = new Set();
   for (const s of displayData.pathSegments || []) if (s.dateStr) dates.add(s.dateStr);

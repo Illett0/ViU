@@ -12,7 +12,8 @@ import { resetLabelQueue } from './labels.mjs';
 import { localizePrefectureNames, populateYearOptions, recluster, refreshRecentFilesList, wireLoading } from './loading.mjs';
 import { initPhotoLink, showUnlinkedPhotoFolder, wirePhotos } from './photos.mjs';
 import { renderBreadcrumb, renderMapTab } from './mapTab.mjs';
-import { openDayView, renderRouteTab, wireRouteTab } from './routeTab.mjs';
+import { dayRecordCounts, openDayView, renderRouteTab, wireRouteTab } from './routeTab.mjs';
+import { renderCalendar } from './calendarView.mjs';
 import { stopTimelapse, wireTimelapse } from './timelapse.mjs';
 import { renderSettingsScreen, wireSettings } from './settings.mjs';
 import { installTestHooks } from './testHooks.mjs';
@@ -179,7 +180,20 @@ export function scheduleMuniViewportRedraw() {
   });
 }
 
+// Local calendar date for 「去年の今日」; E2E pins it via __pathBrowserTest.setToday.
+function todayStr() {
+  if (ui.todayOverride) return ui.todayOverride;
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function renderChronologyTab(derived) {
+  renderCalendar(el.calendarSection, {
+    counts: dayRecordCounts(derived.displayData),
+    clickable: !state.privacy,
+    todayStr: todayStr(),
+    onDay: (dateStr) => openDayView(dateStr),
+  });
   const events = computeChronology(derived.periodData, derived.periodAggregates, derived.muniAggregates, state.municipalityByCode, {
     includeMunicipalities: state.chronologyIncludeMuni,
   });

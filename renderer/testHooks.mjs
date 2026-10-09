@@ -119,6 +119,11 @@ export function installTestHooks() {
       });
       return out;
     },
+    // Pins "today" for the calendar's 「去年の今日」 (issue #37).
+    setToday(dateStr) {
+      ui.todayOverride = dateStr;
+      render();
+    },
     getMaxZoom() {
       return ui.map ? ui.map.getMaxZoom() : null;
     },

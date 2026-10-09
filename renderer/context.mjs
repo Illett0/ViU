@@ -47,6 +47,7 @@ export const el = {
   routeLegend: document.getElementById('route-legend'),
   chronologyScreen: document.getElementById('chronology-screen'),
   chronologyContent: document.getElementById('chronology-content'),
+  calendarSection: document.getElementById('calendar-section'),
   chronologyIncludeMuni: document.getElementById('chronology-include-muni'),
   statsScreen: document.getElementById('stats-screen'),
   statsContent: document.getElementById('stats-content'),
