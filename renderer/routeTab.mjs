@@ -232,7 +232,10 @@ function renderTimelineList() {
           `<span class="visually-hidden">${tr('（地図上の{n}番の地点）', ' (point {n} on the map)', { n: item.number })}</span></span>` +
           `</button>` +
           (v.clusterId != null
-            ? `<button type="button" class="link-btn day-tl-link" data-index="${i}" aria-label="${escapeHtml(tr('{name} の詳細を開く', 'Open details for {name}', { name: placeNameFor(v) }))}">${tr('この地点の詳細 →', 'Place details →')}</button>`
+            ? `<div class="day-tl-links"><button type="button" class="link-btn day-tl-link" data-index="${i}" aria-label="${escapeHtml(tr('{name} の詳細を開く', 'Open details for {name}', { name: placeNameFor(v) }))}">${tr('この地点の詳細 →', 'Place details →')}</button>` +
+              (item.prevDate ? `<button type="button" class="link-btn day-tl-day" data-day="${item.prevDate}" aria-label="${tr('この地点に前回来た日（{d}）を表示', 'Show the previous visit here ({d})', { d: item.prevDate })}">${tr('← 前回 {d}', '← Previous {d}', { d: item.prevDate })}</button>` : '') +
+              (item.nextDate ? `<button type="button" class="link-btn day-tl-day" data-day="${item.nextDate}" aria-label="${tr('この地点に次に来た日（{d}）を表示', 'Show the next visit here ({d})', { d: item.nextDate })}">${tr('次回 {d} →', 'Next {d} →', { d: item.nextDate })}</button>` : '') +
+              `</div>`
             : '') +
           `</li>`
         );
@@ -265,6 +268,12 @@ function renderTimelineList() {
   el.dayViewTimeline.querySelectorAll('.day-tl-link').forEach((btn) => {
     const v = items[Number(btn.dataset.index)].visit;
     btn.addEventListener('click', () => openPlaceFromDayView(v));
+  });
+  el.dayViewTimeline.querySelectorAll('.day-tl-day').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      renderDay(btn.dataset.day);
+      el.dayViewTitle.focus();
+    });
   });
 }
 
@@ -361,6 +370,14 @@ function renderDay(dateStr) {
   const dates = datesWithData(displayData);
   const segments = (displayData.pathSegments || []).filter((s) => s.dateStr === dateStr);
   const timeline = buildTimeline(dateStr, displayData, segments);
+  // Related links (issue #34): the previous/next day this same stay point
+  // was visited, from the same zone-filtered data as everything else here.
+  for (const item of timeline.items) {
+    if (item.kind !== 'stay' || item.visit.clusterId == null) continue;
+    const days = [...new Set(displayData.visits.filter((v) => v.clusterId === item.visit.clusterId && v.dateStr).map((v) => v.dateStr))].sort();
+    item.prevDate = days.filter((d) => d < dateStr).pop() || null;
+    item.nextDate = days.find((d) => d > dateStr) || null;
+  }
   dayView = { ...dayView, dateStr, dates, segments, segLayers: [], stopMarkers: [], items: timeline.items, moves: timeline.moves, photos: photosForDay(dateStr) };
 
   el.dayViewTitle.textContent = tr('{date}の経路', 'Route for {date}', { date: formatDateTitle(dateStr) });

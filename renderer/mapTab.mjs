@@ -13,6 +13,12 @@ import { openDayView } from './routeTab.mjs';
 import { render } from './app.mjs';
 import { tr } from './i18n.mjs';
 
+const NEARBY_PLACE_COUNT = 5;
+
+function formatDistance(meters) {
+  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
+}
+
 // A 滞在地点 pin always wins a pixel-exact overlap with a photo pin (see
 // mapView.mjs's clusterMarkerPane/photoMarkerPane z-order, issue #23), so a
 // photo whose real coordinates sit right on a stay-point pin needs *some*
@@ -459,6 +465,35 @@ export function renderPlaceDetail(derived, params) {
         .join('')
     );
 
+    // Related links (issue #34): the nearest other stay points, so the map
+    // can be browsed place to place. Same zone-filtered rows as the ranking.
+    const anchor = modal || first;
+    const nearby = anchor
+      ? computeClusterRanking(derived.displayData, { privacy: false, municipalityByCode: state.municipalityByCode, limit: null })
+          .filter((r) => r.clusterId !== clusterId)
+          .map((r) => ({ ...r, distance: distanceMeters(anchor.lat, anchor.lng, r.lat, r.lng) }))
+          .sort((a, b) => a.distance - b.distance)
+          .slice(0, NEARBY_PLACE_COUNT)
+      : [];
+    if (nearby.length > 0) {
+      parts.push(`<h3 style="margin-top:16px;">${tr('近くの滞在地点', 'Nearby stay points')}</h3>`);
+      parts.push(
+        '<ul class="nearby-list">' +
+          nearby
+            .map((r) => {
+              // Only a fetched detail name is shown; these rows don't queue fetches.
+              const cached = state.placeLabelCache.get(r.clusterId);
+              const label = cached && cached.status === 'done' ? formatPlaceLabel(r.muniName, cached) : r.muniName;
+              return (
+                `<li><button type="button" class="link-btn nearby-item" data-cluster-id="${r.clusterId}" data-muni-code="${r.muniCode ?? ''}">${escapeHtml(label)}</button>` +
+                `<span class="nearby-meta">${formatDistance(r.distance)} · ${tr('{n} 回', '{n}×', { n: r.count })}</span></li>`
+              );
+            })
+            .join('') +
+          '</ul>'
+      );
+    }
+
     // Stage 4 (issue #2): inline photo gallery for this place, reusing the
     // exact same grid markup/thumbnail-loading/lightbox as the map's photo
     // cluster popup (photoView.mjs) for visual and behavioral consistency.
@@ -473,6 +508,13 @@ export function renderPlaceDetail(derived, params) {
     wireBackLink();
     el.detailPanelContent.querySelectorAll('.day-item[data-date]').forEach((elDay) => {
       elDay.addEventListener('click', () => openDayView(elDay.dataset.date));
+    });
+    el.detailPanelContent.querySelectorAll('.nearby-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const muni = state.municipalityByCode.get(btn.dataset.muniCode);
+        navigateTo(state, 'place', { clusterId: Number(btn.dataset.clusterId), muniCode: null, code: muni ? muni.prefCode : code });
+        render();
+      });
     });
     if (placePhotos.length > 0) {
       ui.placeGalleryCancel = loadGalleryThumbnails(el.detailPanelContent, placePhotos, { onOpenLightbox: openPhotoLightbox });

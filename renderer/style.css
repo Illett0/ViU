@@ -1250,7 +1250,7 @@ html:not([data-ready]) #app {
   text-align: left;
 }
 .link-btn:hover, .link-btn:focus-visible { text-decoration: underline; }
-.day-tl-link { font-size: 12px; margin: 2px 0 6px 34px; }
+.day-tl-links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 6px 34px; font-size: 12px; }
 
 /* Browsing history menu (issue #33). */
 .history-nav { position: relative; }
@@ -1292,3 +1292,8 @@ html:not([data-ready]) #app {
 .history-item.current { color: var(--color-accent); font-weight: 600; }
 .history-item.current::before { content: '● '; }
 .btn-history[aria-expanded="true"]::after { display: none; } /* the open menu replaces its tooltip */
+
+/* Nearby stay points in the place detail (issue #34). */
+.nearby-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.nearby-list li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--color-border); }
+.nearby-meta { color: var(--color-text-dim); white-space: nowrap; }
