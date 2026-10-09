@@ -102,6 +102,9 @@ export function installTestHooks() {
     getMapZoom() {
       return ui.map ? { zoom: ui.map.getZoom(), center: ui.map.getCenter(), context: ui.lastMapContext } : null;
     },
+    getMaxZoom() {
+      return ui.map ? ui.map.getMaxZoom() : null;
+    },
     getView() {
       return currentView(state);
     },

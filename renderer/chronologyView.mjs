@@ -1,9 +1,7 @@
 // Renders the "年表" (chronology) view: first-visit events for prefectures
 // (and optionally municipalities), grouped under year/month headings.
 
-function dateStrFromEpoch(epoch) {
-  return new Date(epoch).toISOString().slice(0, 10);
-}
+import { localDateStr } from './aggregate.mjs';
 
 export function renderChronology(container, events, onClickEvent) {
   container.innerHTML = '';
@@ -16,7 +14,7 @@ export function renderChronology(container, events, onClickEvent) {
   let lastMonth = null;
 
   for (const ev of events) {
-    const dateStr = dateStrFromEpoch(ev.epoch);
+    const dateStr = localDateStr(ev.epoch);
     const [y, m] = dateStr.split('-');
 
     if (y !== lastYear) {

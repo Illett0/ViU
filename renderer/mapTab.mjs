@@ -5,7 +5,7 @@ import { currentView, navigateTo } from './state.mjs';
 import { renderNational, renderNationalMunicipality, renderPrefectureMunicipality, mainlandBounds, renderClusterMarkers, clearMarkers, renderTimelapsePoints, clearTimelapsePoints } from './mapView.mjs';
 import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, MAX_GALLERY_PHOTOS } from './photoView.mjs';
 import { formatDuration } from './statsView.mjs';
-import { distanceMeters, destinationPoint, isPassOnly, computeModalVisitLocation, municipalityName, formatPlaceLabel, escapeHtml, dwellMs, computeClusterRanking } from './aggregate.mjs';
+import { distanceMeters, destinationPoint, isPassOnly, computeModalVisitLocation, municipalityName, formatPlaceLabel, escapeHtml, dwellMs, computeClusterRanking, localDateStr } from './aggregate.mjs';
 import { el, geojsonLayerRef, markerLayerRef, photoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
 import { resetLabelQueue, watchRankingRowsForLabelFetch } from './labels.mjs';
 import { getVisiblePhotos, openPhotoLightbox, photosForPlace, resolvePlaceName } from './photos.mjs';
@@ -323,8 +323,8 @@ export function renderPrefectureDetail(derived, code) {
   const name = entry ? entry.name : '不明';
   const placeCount = entry ? entry.placeCount : 0;
   const stayCount = entry ? entry.stayCount : 0;
-  const firstDate = entry && entry.firstEpoch ? new Date(entry.firstEpoch).toISOString().slice(0, 10) : '-';
-  const lastDate = entry && entry.lastEpoch ? new Date(entry.lastEpoch).toISOString().slice(0, 10) : '-';
+  const firstDate = entry && entry.firstEpoch ? localDateStr(entry.firstEpoch) : '-';
+  const lastDate = entry && entry.lastEpoch ? localDateStr(entry.lastEpoch) : '-';
 
   const scopedVisitsAll = derived.periodData.visits.filter((v) => v.prefCode === code);
   const totalDwell = scopedVisitsAll.reduce((s, v) => s + dwellMs(v), 0);
@@ -497,8 +497,8 @@ export function renderPlaceDetail(derived, params) {
     parts.push(`<div class="stat-row"><span class="label">市区町村</span><span>${row ? row.muniName : '不明'}</span></div>`);
     parts.push(`<div class="stat-row"><span class="label">この期間の滞在回数</span><span>${row ? row.count : 0} 回</span></div>`);
     parts.push(`<div class="stat-row"><span class="label">合計滞在時間</span><span>${row ? formatDuration(row.dwellMs) : '-'}</span></div>`);
-    if (row && row.firstEpoch) parts.push(`<div class="stat-row"><span class="label">最初に訪れた日</span><span>${new Date(row.firstEpoch).toISOString().slice(0, 10)}</span></div>`);
-    if (row && row.lastEpoch) parts.push(`<div class="stat-row"><span class="label">最後に訪れた日</span><span>${new Date(row.lastEpoch).toISOString().slice(0, 10)}</span></div>`);
+    if (row && row.firstEpoch) parts.push(`<div class="stat-row"><span class="label">最初に訪れた日</span><span>${localDateStr(row.firstEpoch)}</span></div>`);
+    if (row && row.lastEpoch) parts.push(`<div class="stat-row"><span class="label">最後に訪れた日</span><span>${localDateStr(row.lastEpoch)}</span></div>`);
     parts.push('<div class="privacy-note">プライバシー保護モードのため、市区町村単位の情報のみ表示しています。</div>');
 
     el.detailPanelContent.innerHTML = parts.join('');

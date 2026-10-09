@@ -6,6 +6,21 @@ const TOKAIDO_53_KM = 490;
 const MAX_DWELL_MS = 24 * 60 * 60 * 1000;
 const MAX_ESTIMATION_GAP_MS = 2 * 60 * 60 * 1000; // 2h — see estimatePhotoLocations
 
+// Displayed calendar dates/years for first/last-visit epochs. Every place this
+// app aggregates is inside Japan, so its local calendar is JST (UTC+9, no
+// DST) — the same default worker/parseWorker.js's localPartsFromEpoch uses.
+// Formatting the raw epoch in UTC instead put anything before 09:00 JST on
+// the previous day (and a 2024-01-01 06:00 first visit in 2023).
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+function localDateStr(epoch) {
+  return new Date(epoch + JST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function localYear(epoch) {
+  return new Date(epoch + JST_OFFSET_MS).getUTCFullYear();
+}
+
 function distanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const toRad = (d) => (d * Math.PI) / 180;
@@ -596,8 +611,7 @@ function computeNewlyVisitedInYear(fullAggregates, year) {
   const result = [];
   for (const entry of fullAggregates.values()) {
     if (entry.firstEpoch == null) continue;
-    const firstYear = new Date(entry.firstEpoch).getUTCFullYear();
-    if (firstYear === year) result.push(entry);
+    if (localYear(entry.firstEpoch) === year) result.push(entry);
   }
   return result.sort((a, b) => a.firstEpoch - b.firstEpoch);
 }
@@ -768,4 +782,6 @@ export {
   computeTopDays,
   computeNewlyVisitedInYear,
   computeChronology,
+  localDateStr,
+  localYear,
 };

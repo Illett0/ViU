@@ -1,0 +1,204 @@
+{
+  "semanticSegments": [
+    {
+      "startTime": "2023-04-10T05:00:00.000+09:00",
+      "endTime": "2023-04-10T07:15:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "activity": {
+        "start": {
+          "latLng": "35.6812000°, 139.7671000°"
+        },
+        "end": {
+          "latLng": "34.9858000°, 135.7588000°"
+        },
+        "distanceMeters": 370000,
+        "topCandidate": {
+          "type": "IN_TRAIN"
+        }
+      }
+    },
+    {
+      "startTime": "2023-04-10T07:30:00.000+09:00",
+      "endTime": "2023-04-10T08:30:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-kyoto",
+          "placeLocation": {
+            "latLng": "34.9858000°, 135.7588000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-01-01T06:00:00.000+09:00",
+      "endTime": "2024-01-01T06:10:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-x",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-05T12:00:00.000+09:00",
+      "endTime": "2024-02-05T12:10:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-x",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-12T12:00:00.000+09:00",
+      "endTime": "2024-02-12T12:10:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-x",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-19T12:00:00.000+09:00",
+      "endTime": "2024-02-19T12:10:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-x",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-02-26T12:00:00.000+09:00",
+      "endTime": "2024-02-26T12:10:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-x",
+          "placeLocation": {
+            "latLng": "35.6812000°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-04T12:00:00.000+09:00",
+      "endTime": "2024-03-04T12:10:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-x2",
+          "placeLocation": {
+            "latLng": "35.6820980°, 139.7671000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-10T09:30:00.000+09:00",
+      "endTime": "2024-03-10T09:50:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "activity": {
+        "start": {
+          "latLng": "35.6812000°, 139.7671000°"
+        },
+        "end": {
+          "latLng": "35.6896000°, 139.7006000°"
+        },
+        "distanceMeters": 6000,
+        "topCandidate": {
+          "type": "IN_BUS"
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-10T10:00:00.000+09:00",
+      "endTime": "2024-03-10T15:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-y",
+          "placeLocation": {
+            "latLng": "35.6896000°, 139.7006000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-10T15:00:00.000+09:00",
+      "endTime": "2024-03-10T16:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "activity": {
+        "start": {
+          "latLng": "35.6896000°, 139.7006000°"
+        },
+        "end": {
+          "latLng": "35.6812000°, 139.7671000°"
+        },
+        "distanceMeters": 4000,
+        "topCandidate": {
+          "type": "WALKING"
+        }
+      }
+    },
+    {
+      "startTime": "2024-03-17T10:00:00.000+09:00",
+      "endTime": "2024-03-17T15:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-y",
+          "placeLocation": {
+            "latLng": "35.6896000°, 139.7006000°"
+          }
+        }
+      }
+    },
+    {
+      "startTime": "2024-04-05T14:00:00.000+09:00",
+      "endTime": "2024-04-05T15:00:00.000+09:00",
+      "startTimeTimezoneUtcOffsetMinutes": 540,
+      "visit": {
+        "probability": 0.92,
+        "topCandidate": {
+          "placeId": "fx-hist-osaka",
+          "placeLocation": {
+            "latLng": "34.7024850°, 135.4959510°"
+          }
+        }
+      }
+    }
+  ],
+  "userLocationProfile": {
+    "frequentPlaces": [
+      {
+        "placeId": "fx-hist-y",
+        "placeLocation": "35.6896000°, 139.7006000°",
+        "label": "HOME"
+      }
+    ]
+  }
+}
