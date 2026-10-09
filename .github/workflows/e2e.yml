@@ -69,8 +69,10 @@ jobs:
 
       - run: npm ci
 
+      # Plain --mac uses package.json's build.mac targets/archs; naming the
+      # target on the command line (--mac dmg) would build the host arch only.
       - name: Build .dmg (arm64 + x64)
-        run: npx electron-builder --mac dmg --publish never
+        run: npx electron-builder --mac --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
