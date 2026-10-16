@@ -218,7 +218,8 @@ export function renderMapTab(derived) {
         // while a 滞在地点 is selected goes back to the prefecture ranking,
         // same as the prefecture-granularity backdrop above.
         () => leavePlaceKeepingView(),
-        { dimmed: true }
+        // A municipality summary (no stay point selected) outlines its municipality.
+        { dimmed: true, selectedCode: view.view === 'place' && view.params.clusterId == null ? view.params.muniCode : null }
       );
     }
     renderPrefectureDetail(derived, prefCode);
@@ -271,7 +272,13 @@ export function zoomToSelectedMarker(params) {
   const key = params.clusterId ?? (params.muniCode != null ? 'muni:' + params.muniCode : null);
   if (key == null) return;
   const marker = ui.currentMarkersByKey.get(key);
-  if (!marker) return;
+  if (!marker) {
+    // A municipality with no pin (not visited, or only per-cluster pins
+    // shown): frame the municipality itself.
+    const feature = params.muniCode != null && state.muniGeoJSON && state.muniGeoJSON.features.find((f) => f.properties.code === params.muniCode);
+    if (feature) ui.map.fitBounds(mainlandBounds(feature), { padding: [30, 30], maxZoom: PLACE_ZOOM });
+    return;
+  }
   const latlng = marker.getLatLng();
   if (ui.map.getZoom() < MIN_USEFUL_ZOOM) {
     // Too zoomed out to tell pins apart — jump in.
@@ -535,18 +542,29 @@ export function renderPlaceDetail(derived, params) {
       ui.map.panTo([modal.lat, modal.lng]);
     }
   } else {
-    // Privacy-mode municipality rollup: no coords, no Nominatim detail.
+    // Municipality summary (privacy-mode rollup, or a municipality opened
+    // from the address bar — possibly one never visited): no coords, no
+    // Nominatim detail.
     const scopedVisits = derived.displayData.visits.filter((v) => v.prefCode === code);
     const rows = computeClusterRanking({ visits: scopedVisits }, { privacy: true, municipalityByCode: state.municipalityByCode, limit: null });
     const row = rows.find((r) => r.muniCode === muniCode);
 
     parts.push(`<h2>${tr('市区町村', 'Municipality')}</h2>`);
     parts.push(`<div class="stat-row"><span class="label">${tr('都道府県', 'Prefecture')}</span><span>${prefEntry ? prefEntry.name : ''}</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">${tr('市区町村', 'Municipality')}</span><span>${row ? row.muniName : tr('不明', 'Unknown')}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('市区町村', 'Municipality')}</span><span>${row ? row.muniName : municipalityName(state.municipalityByCode, muniCode)}</span></div>`);
     parts.push(`<div class="stat-row"><span class="label">${tr('この期間の滞在回数', 'Stays in this period')}</span><span>${tr('{n} 回', '{n}', { n: row ? row.count : 0 })}</span></div>`);
     parts.push(`<div class="stat-row"><span class="label">${tr('合計滞在時間', 'Total time spent')}</span><span>${row ? formatDuration(row.dwellMs) : '-'}</span></div>`);
     if (row && row.firstEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最初に訪れた日', 'First visit')}</span><span>${localDateStr(row.firstEpoch)}</span></div>`);
     if (row && row.lastEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最後に訪れた日', 'Last visit')}</span><span>${localDateStr(row.lastEpoch)}</span></div>`);
+    if (!row) {
+      const muniEntry = derived.muniAggregates.get(muniCode);
+      const note = muniEntry && isPassOnly(muniEntry)
+        ? tr('この期間は通過しただけで、滞在の記録はありません。', 'You only passed through here in this period; there are no stays.')
+        : muniEntry && muniEntry.stayCount > 0
+          ? tr('この期間の滞在は、すべて除外ゾーン内のため表示していません。', 'All stays here in this period are inside exclusion zones, so none are shown.')
+          : tr('この期間に訪れた記録はありません。', 'No visits here in this period.');
+      parts.push(`<p class="empty-note">${note}</p>`);
+    }
     if (state.privacy) parts.push(`<div class="privacy-note">${tr('プライバシー保護モードのため、市区町村単位の情報のみ表示しています。', 'Privacy mode is on, so only municipality-level information is shown.')}</div>`);
 
     el.detailPanelContent.innerHTML = parts.join('');
