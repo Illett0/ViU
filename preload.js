@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('pathBrowser', {
   getReferenceLists: () => ipcRenderer.invoke('timeline:get-reference-lists'),
   recluster: (fingerprint, threshold, points) => ipcRenderer.invoke('timeline:recluster', { fingerprint, threshold, points }),
   reverseGeocode: (placeId, lat, lng) => ipcRenderer.invoke('timeline:reverse-geocode', { placeId, lat, lng }),
+  getCachedLabels: (places) => ipcRenderer.invoke('timeline:get-cached-labels', places),
   getZones: () => ipcRenderer.invoke('timeline:get-zones'),
   saveZones: (zones) => ipcRenderer.invoke('timeline:save-zones', zones),
   getBookmarks: () => ipcRenderer.invoke('bookmarks:get'),

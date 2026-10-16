@@ -2,33 +2,28 @@
 // name and reopen it later. Persisted by main.js in userData/bookmarks.json
 // (lib/bookmarks.js) and shared across timeline files, like exclusion zones.
 //
-// A bookmark records tab, view, period filter and granularity. A stay point
+// A bookmark records tab, view, the open day-view date (if any), period
+// filter and granularity. A stay point
 // is stored by its real-world anchor (the cluster's modal location), not its
 // clusterId — cluster ids change with the cluster-distance slider or another
 // file — and is resolved back to whichever stay point is nearest on open.
 
 import { computeModalVisitLocation, distanceMeters, escapeHtml, isInAnyZone } from './aggregate.mjs';
-import { currentView, navigateTo } from './state.mjs';
-import { el, state } from './context.mjs';
+import { createEntry, currentView, navigateTo, resetHistory } from './state.mjs';
+import { el, state, ui } from './context.mjs';
 import { tr } from './i18n.mjs';
 import { stopTimelapse } from './timelapse.mjs';
 import { historyEntryLabel } from './historyMenu.mjs';
-import { getDerived, render, resetNavigationToNational, setGranularity } from './app.mjs';
+import { showToast } from './browserNav.mjs';
+import { getDerived, render, setGranularity } from './app.mjs';
 
 // Farther than the largest cluster distance (200m) means "not the same place".
 const ANCHOR_MATCH_METERS = 200;
 
-const TAB_LABELS = {
-  route: () => tr('経路マップ', 'Route Map'),
-  chronology: () => tr('年表', 'Chronology'),
-  stats: () => tr('移動統計', 'Travel Stats'),
-};
-
 function defaultName() {
-  const view = currentView(state);
-  const base = TAB_LABELS[state.tab] ? TAB_LABELS[state.tab]() : historyEntryLabel(view);
+  const base = historyEntryLabel(currentView(state));
   const { year, month } = state.filter;
-  if (year == null) return base;
+  if (year == null || currentView(state).day) return base;
   const period = month == null ? tr('{y}年', '{y}', { y: year }) : tr('{y}年{m}月', '{y}-{mm}', { y: year, m: month, mm: String(month).padStart(2, '0') });
   return base + tr('（{p}）', ' ({p})', { p: period });
 }
@@ -41,6 +36,7 @@ function captureCurrent(name) {
     view: view.view,
     params: { code: view.params.code ?? null, muniCode: view.params.muniCode ?? null },
     anchor: null,
+    day: view.day || null,
     filter: { year: state.filter.year, month: state.filter.month },
     granularity: state.granularity,
     createdAt: Date.now(),
@@ -76,9 +72,9 @@ export function openBookmark(bookmark) {
   el.filterYear.value = state.filter.year ?? '';
   el.filterMonth.value = state.filter.month ?? '';
   setGranularity(bookmark.granularity || 'prefecture');
-  state.tab = bookmark.tab || 'map';
 
-  resetNavigationToNational();
+  resetHistory(state, createEntry('national'));
+  ui.lastMapContext = null;
   let found = true;
   if (bookmark.view === 'prefecture' || bookmark.view === 'place') {
     navigateTo(state, 'prefecture', { code: bookmark.params.code });
@@ -93,6 +89,11 @@ export function openBookmark(bookmark) {
       navigateTo(state, 'place', { clusterId: null, muniCode: bookmark.params.muniCode, code: bookmark.params.code });
     }
   }
+  // The bookmarked tab / day view is the same page, not one more entry.
+  const page = currentView(state);
+  page.tab = bookmark.tab || 'map';
+  page.day = state.privacy ? null : bookmark.day || null;
+  state.tab = page.tab;
   render();
   if (!found) {
     alert(tr('ブックマークした滞在地点は、今のデータでは見つかりませんでした（除外ゾーン内・別のファイルなど）。都道府県を表示します。', 'The bookmarked stay point was not found in the current data (inside an exclusion zone, a different file, etc.). Showing its prefecture instead.'));
@@ -135,7 +136,7 @@ function isOpen() {
   return !el.bookmarkPanel.hidden;
 }
 
-function open() {
+export function openBookmarkPanel() {
   if (!state.raw) return;
   el.bookmarkName.value = defaultName();
   renderList();
@@ -152,6 +153,16 @@ function close({ restoreFocus = false } = {}) {
   if (restoreFocus) el.btnBookmarks.focus();
 }
 
+// Ctrl+D inside the day view, whose modal covers the ☆ panel: saves the
+// page under its default name right away and says so.
+export async function bookmarkCurrentPage() {
+  if (!state.raw) return;
+  const name = defaultName();
+  state.bookmarks.push(captureCurrent(name));
+  await persist();
+  showToast(tr('☆「{n}」をブックマークしました', '☆ Bookmarked "{n}"', { n: name }));
+}
+
 export function updateBookmarkButton() {
   el.btnBookmarks.disabled = !state.raw;
 }
@@ -161,7 +172,7 @@ export async function initBookmarks() {
 }
 
 export function wireBookmarks() {
-  el.btnBookmarks.addEventListener('click', () => (isOpen() ? close() : open()));
+  el.btnBookmarks.addEventListener('click', () => (isOpen() ? close() : openBookmarkPanel()));
   el.bookmarkForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = el.bookmarkName.value.trim() || defaultName();

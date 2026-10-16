@@ -25,7 +25,7 @@
     <div id="address-bar" class="address-bar">
       <nav id="breadcrumb" aria-label="パンくずリスト" data-en-aria-label="Breadcrumb"></nav>
       <input id="address-input" type="text" role="combobox" aria-expanded="false" aria-controls="address-results" aria-autocomplete="list"
-        placeholder="都道府県・市区町村・地名・日付（2024-01-20）で移動" data-en-placeholder="Go to a prefecture, municipality, place or date (2024-01-20)"
+        placeholder="都道府県・市区町村・地名・日付（2024-01-20）・年月（2024-01）で移動" data-en-placeholder="Go to a prefecture, municipality, place, date (2024-01-20) or month (2024-01)"
         aria-label="移動先を検索" data-en-aria-label="Search for a place or date" hidden />
       <ul id="address-results" class="history-menu address-results" role="listbox" hidden></ul>
       <button id="btn-search" class="btn btn-icon btn-search" title="検索して移動（Ctrl+L）" data-en-title="Search and go (Ctrl+L)" aria-label="検索して移動" data-en-aria-label="Search and go" hidden>&#128269;</button>
@@ -43,13 +43,13 @@
         </label>
       </div>
       <div class="history-nav">
-        <button id="btn-back" class="btn btn-icon" title="戻る" data-en-title="Back" disabled>&#8592;</button>
-        <button id="btn-forward" class="btn btn-icon" title="進む" data-en-title="Forward" disabled>&#8594;</button>
-        <button id="btn-history" class="btn btn-icon btn-history" title="閲覧履歴" data-en-title="History" aria-label="閲覧履歴" data-en-aria-label="History" aria-haspopup="menu" aria-expanded="false" aria-controls="history-menu" disabled>&#9662;</button>
+        <button id="btn-back" class="btn btn-icon" title="戻る（Alt+←）" data-en-title="Back (Alt+←)" aria-label="戻る" data-en-aria-label="Back" disabled>&#8592;</button>
+        <button id="btn-forward" class="btn btn-icon" title="進む（Alt+→）" data-en-title="Forward (Alt+→)" aria-label="進む" data-en-aria-label="Forward" disabled>&#8594;</button>
+        <button id="btn-history" class="btn btn-icon btn-history" title="閲覧履歴（Ctrl+H）" data-en-title="History (Ctrl+H)" aria-label="閲覧履歴" data-en-aria-label="History" aria-haspopup="menu" aria-expanded="false" aria-controls="history-menu" disabled>&#9662;</button>
         <ul id="history-menu" class="history-menu" role="menu" aria-label="閲覧履歴" data-en-aria-label="History" hidden></ul>
       </div>
       <div class="bookmark-nav">
-        <button id="btn-bookmarks" class="btn btn-icon" title="ブックマーク" data-en-title="Bookmarks" aria-label="ブックマーク" data-en-aria-label="Bookmarks" aria-expanded="false" aria-controls="bookmark-panel" disabled>&#9734;</button>
+        <button id="btn-bookmarks" class="btn btn-icon" title="ブックマーク（Ctrl+D）" data-en-title="Bookmarks (Ctrl+D)" aria-label="ブックマーク" data-en-aria-label="Bookmarks" aria-expanded="false" aria-controls="bookmark-panel" disabled>&#9734;</button>
         <div id="bookmark-panel" class="history-menu bookmark-panel" role="dialog" aria-label="ブックマーク" data-en-aria-label="Bookmarks" hidden>
           <form id="bookmark-form" class="bookmark-form">
             <input id="bookmark-name" type="text" maxlength="80" aria-label="ブックマーク名" data-en-aria-label="Bookmark name" />
@@ -310,6 +310,10 @@
     </div>
 
   </main>
+
+  <!-- Where the hovered/focused link leads (browserNav.mjs), like a browser's URL preview. -->
+  <div id="link-status" class="link-status" aria-hidden="true" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>

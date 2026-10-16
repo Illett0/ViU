@@ -38,6 +38,7 @@ export function renderChronology(container, events, onClickEvent) {
 
     const item = document.createElement('div');
     item.className = 'chronology-item';
+    if (ev.type === 'prefecture') item.dataset.href = `pref:${ev.code}`;
     const isPref = ev.type === 'prefecture';
     const firstVisit = tr('{name} 初訪問', 'First visit to {name}', { name: ev.name });
     const label = isPref && ev.muniHintName ? firstVisit + tr('（{m}）', ' ({m})', { m: ev.muniHintName }) : firstVisit;

@@ -304,6 +304,15 @@ ipcMain.handle('timeline:reverse-geocode', async (event, { placeId, lat, lng }) 
   return nominatim.reverseGeocode(app.getPath('userData'), { placeId, lat, lng });
 });
 
+// Address bar (issue #36 follow-up): detail names fetched in earlier sessions,
+// read from the disk cache only — nothing is sent. Same privacy-mode gate as
+// above, since these labels are exactly what privacy mode hides.
+ipcMain.handle('timeline:get-cached-labels', async (event, places) => {
+  if (privacyModeEnabled || !Array.isArray(places)) return [];
+  const userDataPath = app.getPath('userData');
+  return places.map((p) => nominatim.getCachedLabel(userDataPath, p));
+});
+
 // Clears the on-disk performance caches (municipality/clustering results,
 // Nominatim reverse-geocode labels, scanned photo metadata, generated
 // thumbnails). Does NOT touch recent-files history, backups, exclusion

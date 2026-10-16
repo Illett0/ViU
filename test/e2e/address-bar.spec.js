@@ -2,12 +2,16 @@
 
 // E2E suite for issue #36 (browsing UI): the address bar — the
 // breadcrumb becomes a search field (🔍, "/" or Ctrl+L) that finds
-// prefectures (Japanese or English names), visited municipalities, fetched
-// detail names and dates, and jumps to them; Esc restores the breadcrumb;
-// privacy mode keeps dates and individual places out of the results.
+// prefectures (Japanese or English names), every municipality (unvisited ones
+// tagged), detail names fetched now or in an earlier session (disk cache, no
+// request), loosely written dates and periods, and jumps to them; Esc
+// restores the breadcrumb; privacy mode keeps dates and individual places
+// out of the results.
 
 const assert = require('assert');
 const fs = require('fs');
+const path = require('path');
+const { ROOT } = require('./helpers');
 const { OSAKA_CODE, TOKYO_CODE, settle, createStepRunner, launchApp, completeOnboarding, goToPrefecture, getView } = require('./helpers');
 
 async function main() {
@@ -25,6 +29,26 @@ async function main() {
 
   try {
     await completeOnboarding(page, step);
+
+    // A detail name "fetched in an earlier session": the main process reads
+    // its disk cache lazily on first use, which is the address bar's open.
+    const cacheVersion = Number(fs.readFileSync(path.join(ROOT, 'lib', 'nominatim.js'), 'utf-8').match(/const CACHE_VERSION = (\d+)/)[1]);
+    fs.writeFileSync(
+      path.join(userDataDir, 'nominatim-cache.json'),
+      JSON.stringify({ version: cacheVersion, entries: { 'place:fixture-osaka-a': { label: '過去の地名テスト', error: null } } })
+    );
+
+    await step('a detail name fetched in an earlier session is searchable without fetching', async () => {
+      await page.click('#btn-search');
+      await page.fill('#address-input', '過去の地名');
+      await page.waitForFunction(() => document.querySelector('#address-results li') && document.querySelector('#address-results li').textContent.startsWith('滞在地点過去の地名テスト'));
+      const calls = await app.evaluate(() => globalThis.__viuGeocodeStub.calls.length);
+      assert.strictEqual(calls, 0, 'nothing was requested');
+      await page.keyboard.press('Enter');
+      const v = await getView(page);
+      assert.deepStrictEqual([v.view, v.params.code], ['place', OSAKA_CODE]);
+      await page.keyboard.press('Alt+Home');
+    });
 
     await step('"/" turns the breadcrumb into a search field; a prefecture name jumps there', async () => {
       assert(await page.isVisible('#btn-search'));
@@ -85,6 +109,49 @@ async function main() {
       assert.notStrictEqual(v.params.clusterId, null);
     });
 
+    await step('an unvisited municipality is offered (tagged) and shown on the municipality map of its prefecture', async () => {
+      await page.click('#btn-search');
+      const results = await typeQuery('那覇');
+      assert(results[0].includes('那覇市') && results[0].includes('未訪問'), `${results}`);
+      await page.keyboard.press('Enter');
+      await settle(page);
+      const v = await getView(page);
+      assert.deepStrictEqual([v.view, v.params.clusterId, v.params.code], ['place', null, 47]);
+      const panel = await page.textContent('#detail-panel-content');
+      assert(panel.includes('那覇市') && panel.includes('この期間に訪れた記録はありません'), panel);
+      assert((await page.evaluate(() => window.__pathBrowserTest.getMapZoom())).zoom >= 10, 'zoomed to the municipality');
+    });
+
+    await step('loosely written dates: 2024年1月20日 and 1/20 find that day', async () => {
+      await page.click('#btn-search');
+      let results = await typeQuery('2024年1月20日');
+      assert.strictEqual(results[0], '日付2024-01-20');
+      results = await typeQuery('1/20');
+      assert.strictEqual(results[0], '日付2024-01-20');
+      await page.keyboard.press('Enter');
+      await page.waitForSelector('#day-view-overlay:not([hidden])');
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('#day-view-overlay', { state: 'hidden' });
+    });
+
+    await step('2024年1月 / 2024 switch the period like the header selects', async () => {
+      await page.click('#btn-search');
+      let results = await typeQuery('2024年1月');
+      assert.strictEqual(results[0], '期間2024年1月この期間で表示');
+      await page.keyboard.press('Enter');
+      await settle(page);
+      assert.deepStrictEqual([await page.inputValue('#filter-year'), await page.inputValue('#filter-month')], ['2024', '1']);
+      assert.strictEqual((await getView(page)).view, 'national');
+      await page.click('#btn-search');
+      results = await typeQuery('2024');
+      assert.strictEqual(results[0], '期間2024年この期間で表示');
+      await page.keyboard.press('Enter');
+      await settle(page);
+      assert.deepStrictEqual([await page.inputValue('#filter-year'), await page.inputValue('#filter-month')], ['2024', '']);
+      await page.selectOption('#filter-year', '');
+      await settle(page);
+    });
+
     await step('no match says so; Esc restores the breadcrumb', async () => {
       await page.click('#btn-search');
       const results = await typeQuery('zzzz');
@@ -97,8 +164,10 @@ async function main() {
     await step('privacy mode: dates and individual places are not offered', async () => {
       await page.click('#btn-privacy');
       await page.click('#btn-search');
-      assert.deepStrictEqual(await typeQuery('2024'), ['見つかりませんでした']);
+      assert.deepStrictEqual(await typeQuery('2024'), ['期間2024年この期間で表示'], 'the period, but no dates');
       assert.deepStrictEqual(await typeQuery('stub'), ['見つかりませんでした']);
+      const cached = await page.evaluate(() => window.pathBrowser.getCachedLabels([{ placeId: 'fixture-osaka-a', lat: 0, lng: 0 }]));
+      assert.deepStrictEqual(cached, [], 'the main process withholds cached names under privacy mode');
       await page.keyboard.press('Escape');
       await page.click('#btn-privacy');
     });

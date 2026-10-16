@@ -9,7 +9,7 @@ import { dayViewLayerRef, dayViewMarkerLayerRef, dayViewPhotoLayerRef, el, route
 import { getVisiblePhotos, openPhotoLightbox, resolvePlaceName, photosForDay } from './photos.mjs';
 import { enqueueLabelFetch, onPlaceLabelUpdated } from './labels.mjs';
 import { getDerived, render } from './app.mjs';
-import { navigateTo } from './state.mjs';
+import { currentView, goTo, isSamePageWithoutDay, navigateTo, navigateWithin } from './state.mjs';
 import { numberLocale, tr } from './i18n.mjs';
 
 // Which transport modes are currently toggled off in the route map legend —
@@ -85,8 +85,8 @@ export function renderRouteTab(derived) {
 }
 
 // ---------- Day view (滞在日 -> その日の経路マップ) ----------
-// A modal dialog, independent of the main map/route-tab state machine (so
-// opening/closing it never disturbs the caller's navigation/history). Shows
+// A modal dialog over whichever tab it was opened from; which day (if any)
+// it shows is part of the browsing history entry (see openDayView). Shows
 // one day as both a map and an equivalent text timeline (stays and moves in
 // order) — the timeline is the accessible "table view" of the map: every
 // stay/move on the map is also listed there in text, and hovering/focusing a
@@ -252,9 +252,9 @@ function renderTimelineList() {
           `<span class="visually-hidden">${tr('（地図上の{n}番の地点）', ' (point {n} on the map)', { n: item.number })}</span></span>` +
           `</button>` +
           (v.clusterId != null
-            ? `<div class="day-tl-links"><button type="button" class="link-btn day-tl-link" data-index="${i}" aria-label="${escapeHtml(tr('{name} の詳細を開く', 'Open details for {name}', { name: placeNameFor(v) }))}">${tr('この地点の詳細 →', 'Place details →')}</button>` +
-              (item.prevDate ? `<button type="button" class="link-btn day-tl-day" data-day="${item.prevDate}" aria-label="${tr('この地点に前回来た日（{d}）を表示', 'Show the previous visit here ({d})', { d: item.prevDate })}">${tr('← 前回 {d}', '← Previous {d}', { d: item.prevDate })}</button>` : '') +
-              (item.nextDate ? `<button type="button" class="link-btn day-tl-day" data-day="${item.nextDate}" aria-label="${tr('この地点に次に来た日（{d}）を表示', 'Show the next visit here ({d})', { d: item.nextDate })}">${tr('次回 {d} →', 'Next {d} →', { d: item.nextDate })}</button>` : '') +
+            ? `<div class="day-tl-links"><button type="button" class="link-btn day-tl-link" data-index="${i}" data-href="place:${v.clusterId}" aria-label="${escapeHtml(tr('{name} の詳細を開く', 'Open details for {name}', { name: placeNameFor(v) }))}">${tr('この地点の詳細 →', 'Place details →')}</button>` +
+              (item.prevDate ? `<button type="button" class="link-btn day-tl-day" data-day="${item.prevDate}" data-href="day:${item.prevDate}" aria-label="${tr('この地点に前回来た日（{d}）を表示', 'Show the previous visit here ({d})', { d: item.prevDate })}">${tr('← 前回 {d}', '← Previous {d}', { d: item.prevDate })}</button>` : '') +
+              (item.nextDate ? `<button type="button" class="link-btn day-tl-day" data-day="${item.nextDate}" data-href="day:${item.nextDate}" aria-label="${tr('この地点に次に来た日（{d}）を表示', 'Show the next visit here ({d})', { d: item.nextDate })}">${tr('次回 {d} →', 'Next {d} →', { d: item.nextDate })}</button>` : '') +
               `</div>`
             : '') +
           `</li>`
@@ -290,18 +290,14 @@ function renderTimelineList() {
     btn.addEventListener('click', () => openPlaceFromDayView(v));
   });
   el.dayViewTimeline.querySelectorAll('.day-tl-day').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      renderDay(btn.dataset.day);
-      el.dayViewTitle.focus();
-    });
+    btn.addEventListener('click', () => goToDay(btn.dataset.day));
   });
 }
 
 // Follows a stay in the day view to that stay point's own detail panel on
-// the coverage map — the same place view its ranking row opens.
+// the coverage map — the same place view its ranking row opens. The day view
+// stays in history underneath, so "back" returns to it.
 function openPlaceFromDayView(v) {
-  closeDayView();
-  state.tab = 'map';
   navigateTo(state, 'place', { clusterId: v.clusterId, muniCode: null, code: v.prefCode });
   render();
 }
@@ -478,9 +474,54 @@ function refreshPlaceName(clusterId) {
   });
 }
 
+// The day view is a page of its own in the browsing history (browserNav.mjs):
+// opening it, or moving to another day inside it, pushes an entry with
+// `day` set on top of the current page, and render() shows/hides the dialog
+// to match the current entry (syncDayView). Links and buttons call these.
 export function openDayView(dateStr) {
-  if (!state.raw) return;
-  const opener = document.activeElement;
+  if (!state.raw || !dateStr) return;
+  navigateWithin(state, { day: dateStr });
+  render();
+}
+
+function goToDay(dateStr) {
+  if (!dateStr || (dayView && dayView.dateStr === dateStr)) return;
+  navigateWithin(state, { day: dateStr });
+  render();
+}
+
+// Esc / 閉じる / backdrop: back to the page the day view was opened on — a
+// real "back" when that page is just behind the day entries (so "forward"
+// reopens the day view), otherwise a new entry for it.
+export function closeDayView() {
+  if (el.dayViewOverlay.hidden) return;
+  const current = currentView(state);
+  if (!current.day) {
+    hideDayView();
+    return;
+  }
+  let i = state.historyIndex - 1;
+  while (i >= 0 && state.history[i].day && isSamePageWithoutDay({ ...state.history[i], day: null }, current)) i -= 1;
+  if (i >= 0 && isSamePageWithoutDay(state.history[i], current)) goTo(state, i);
+  else navigateWithin(state, { day: null });
+  render();
+}
+
+// Called by render() with the current entry's day (null = no day view) and
+// the element focused before render() replaced anything (the opener).
+export function syncDayView(dateStr, opener) {
+  if (!dateStr) {
+    hideDayView();
+  } else if (el.dayViewOverlay.hidden) {
+    showDayView(dateStr, opener);
+  } else if (!dayView || dayView.dateStr !== dateStr) {
+    renderDay(dateStr);
+    // Keep focus inside the dialog, on the (newly announced) date heading.
+    el.dayViewTitle.focus();
+  }
+}
+
+function showDayView(dateStr, opener) {
   el.dayViewOverlay.hidden = false;
   if (!ui.dayViewMap) {
     ui.dayViewMap = initRouteMap(el.dayViewMapDiv);
@@ -499,23 +540,30 @@ export function openDayView(dateStr) {
 function stepDay(delta) {
   if (!dayView) return;
   const i = dayView.dates.indexOf(dayView.dateStr);
-  const next = dayView.dates[i + delta];
-  if (!next) return;
-  renderDay(next);
-  // Keep focus inside the dialog, on the (newly announced) date heading.
-  el.dayViewTitle.focus();
+  goToDay(dayView.dates[i + delta]);
 }
 
-export function closeDayView() {
+function hideDayView() {
   if (el.dayViewOverlay.hidden) return;
   el.dayViewOverlay.hidden = true;
   if (dayGalleryCancel) {
     dayGalleryCancel();
     dayGalleryCancel = null;
   }
-  const opener = dayView && dayView.opener;
+  const opener = reattached(dayView && dayView.opener);
   dayView = null;
-  if (opener && document.contains(opener)) opener.focus();
+  if (opener) opener.focus();
+}
+
+// Going back to the page underneath re-renders it, so the element that
+// opened the day view may have been replaced by an identical new one —
+// find that one by id, or by tag + classes + link destination.
+function reattached(node) {
+  if (!node || document.contains(node)) return node;
+  if (node.id) return document.getElementById(node.id);
+  if (!node.dataset || !node.dataset.href) return null;
+  const classes = [...node.classList].filter((c) => c !== 'visited').map((c) => '.' + CSS.escape(c)).join('');
+  return document.querySelector(`${node.tagName}${classes}[data-href="${CSS.escape(node.dataset.href)}"]`);
 }
 
 function focusableIn(container) {
@@ -542,7 +590,8 @@ export function wireRouteTab() {
     if (e.key === 'Escape') {
       e.preventDefault();
       closeDayView();
-    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !el.dayViewMapDiv.contains(e.target)) {
+    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.altKey && !el.dayViewMapDiv.contains(e.target)) {
+      // (Alt+←/→ is back/forward, handled in browserNav.mjs.)
       // Arrow keys with focus inside the map still pan it (Leaflet keyboard nav).
       e.preventDefault();
       stepDay(e.key === 'ArrowLeft' ? -1 : 1);

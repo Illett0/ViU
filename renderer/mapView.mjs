@@ -229,7 +229,7 @@ export function findMunicipalityCodeForPoint(muniGeoJSON, lat, lng) {
   return null;
 }
 
-function buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed = false } = {}) {
+function buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed = false, selectedCode = null } = {}) {
   const max = maxPlaceCount(aggregates);
   const fillOpacity = dimmed ? DIMMED_FILL_OPACITY : BASE_FILL_OPACITY;
   return L.geoJSON(
@@ -237,10 +237,13 @@ function buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed = fa
     {
       style: (feature) => {
         const entry = aggregates.get(feature.properties.code);
-        return { color: DEFAULT_BORDER_COLOR, weight: 0.6, fillColor: fillColorFor(entry, max), fillOpacity };
+        const isSelected = feature.properties.code === selectedCode;
+        return { color: isSelected ? SELECTED_BORDER_COLOR : DEFAULT_BORDER_COLOR, weight: isSelected ? 3 : 0.6, fillColor: fillColorFor(entry, max), fillOpacity };
       },
       onEachFeature: (feature, lyr) => {
         const entry = aggregates.get(feature.properties.code);
+        const isSelected = feature.properties.code === selectedCode;
+        if (isSelected) lyr.on('add', () => lyr.bringToFront());
         lyr.bindTooltip(feature.properties.name + tr('（{s}）', ' ({s})', { s: tooltipSuffix(entry) }), { className: 'pref-tooltip' });
         lyr.on('click', () => onClickMuni(feature.properties.code));
         // Same z-order fix as the prefecture layer (see renderNational) — a
@@ -250,7 +253,7 @@ function buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed = fa
           lyr.bringToFront();
           lyr.setStyle({ weight: 1.5, color: SELECTED_BORDER_COLOR });
         });
-        lyr.on('mouseout', () => lyr.setStyle({ weight: 0.6, color: DEFAULT_BORDER_COLOR }));
+        lyr.on('mouseout', () => lyr.setStyle({ weight: isSelected ? 3 : 0.6, color: isSelected ? SELECTED_BORDER_COLOR : DEFAULT_BORDER_COLOR }));
       },
     }
   );
@@ -276,13 +279,13 @@ export function renderNationalMunicipality(map, layerRef, muniGeojson, aggregate
 }
 
 // A single prefecture has few enough municipalities that no culling is needed.
-export function renderPrefectureMunicipality(map, layerRef, muniGeojson, prefCode, aggregates, onClickMuni, { dimmed = false } = {}) {
+export function renderPrefectureMunicipality(map, layerRef, muniGeojson, prefCode, aggregates, onClickMuni, { dimmed = false, selectedCode = null } = {}) {
   if (layerRef.layer) {
     map.removeLayer(layerRef.layer);
     layerRef.layer = null;
   }
   const features = muniGeojson.features.filter((f) => f.properties.prefCode === prefCode);
-  const layer = buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed }).addTo(map);
+  const layer = buildMunicipalityLayer(features, aggregates, onClickMuni, { dimmed, selectedCode }).addTo(map);
   layerRef.layer = layer;
 }
 

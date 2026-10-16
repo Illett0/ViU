@@ -7,7 +7,7 @@ import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, 
 import { formatDuration } from './statsView.mjs';
 import { distanceMeters, destinationPoint, isPassOnly, computeModalVisitLocation, municipalityName, formatPlaceLabel, escapeHtml, dwellMs, computeClusterRanking, localDateStr } from './aggregate.mjs';
 import { el, geojsonLayerRef, markerLayerRef, photoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
-import { resetLabelQueue, watchRankingRowsForLabelFetch } from './labels.mjs';
+import { enqueueLabelFetch, resetLabelQueue, watchRankingRowsForLabelFetch } from './labels.mjs';
 import { getVisiblePhotos, openPhotoLightbox, photosForPlace, resolvePlaceName } from './photos.mjs';
 import { openDayView } from './routeTab.mjs';
 import { render } from './app.mjs';
@@ -218,7 +218,8 @@ export function renderMapTab(derived) {
         // while a 滞在地点 is selected goes back to the prefecture ranking,
         // same as the prefecture-granularity backdrop above.
         () => leavePlaceKeepingView(),
-        { dimmed: true }
+        // A municipality summary (no stay point selected) outlines its municipality.
+        { dimmed: true, selectedCode: view.view === 'place' && view.params.clusterId == null ? view.params.muniCode : null }
       );
     }
     renderPrefectureDetail(derived, prefCode);
@@ -271,7 +272,13 @@ export function zoomToSelectedMarker(params) {
   const key = params.clusterId ?? (params.muniCode != null ? 'muni:' + params.muniCode : null);
   if (key == null) return;
   const marker = ui.currentMarkersByKey.get(key);
-  if (!marker) return;
+  if (!marker) {
+    // A municipality with no pin (not visited, or only per-cluster pins
+    // shown): frame the municipality itself.
+    const feature = params.muniCode != null && state.muniGeoJSON && state.muniGeoJSON.features.find((f) => f.properties.code === params.muniCode);
+    if (feature) ui.map.fitBounds(mainlandBounds(feature), { padding: [30, 30], maxZoom: PLACE_ZOOM });
+    return;
+  }
   const latlng = marker.getLatLng();
   if (ui.map.getZoom() < MIN_USEFUL_ZOOM) {
     // Too zoomed out to tell pins apart — jump in.
@@ -378,7 +385,7 @@ export function renderPrefectureDetail(derived, code) {
             r.clusterId != null && !state.privacy
               ? `<span class="detail-name" data-cluster-id="${r.clusterId}" data-muni-name="${escapeHtml(r.muniName)}">${escapeHtml(formatPlaceLabel(r.muniName, state.placeLabelCache.get(r.clusterId)))}</span>`
               : r.muniName;
-          return `<div class="place-item" data-cluster-id="${r.clusterId ?? ''}" data-muni-code="${r.muniCode ?? ''}"><span class="place-count">${tr('{n}回', '{n}×', { n: r.count })}</span> — ${nameHtml}</div>`;
+          return `<div class="place-item" data-cluster-id="${r.clusterId ?? ''}" data-muni-code="${r.muniCode ?? ''}" data-href="${r.clusterId != null ? `place:${r.clusterId}` : `muni:${r.muniCode}`}"><span class="place-count">${tr('{n}回', '{n}×', { n: r.count })}</span> — ${nameHtml}</div>`;
         })
         .join('')
     );
@@ -458,13 +465,6 @@ export function renderPlaceDetail(derived, params) {
     if (modal) {
       parts.push(`<div class="stat-row"><span class="label">${tr('座標（補助情報）', 'Coordinates (for reference)')}</span><span>${modal.lat.toFixed(4)}, ${modal.lng.toFixed(4)}</span></div>`);
     }
-    parts.push(`<h3 style="margin-top:16px;">${tr('滞在日一覧', 'Days stayed')}</h3><p class="panel-hint">${tr('日付をクリックすると、その日の経路マップを表示します。', 'Click a date to see the route map for that day.')}</p>`);
-    parts.push(
-      memberVisits
-        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: v.dateStr })}">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
-        .join('')
-    );
-
     // Related links (issue #34): the nearest other stay points, so the map
     // can be browsed place to place. Same zone-filtered rows as the ranking.
     const anchor = modal || first;
@@ -481,11 +481,11 @@ export function renderPlaceDetail(derived, params) {
         '<ul class="nearby-list">' +
           nearby
             .map((r) => {
-              // Only a fetched detail name is shown; these rows don't queue fetches.
-              const cached = state.placeLabelCache.get(r.clusterId);
-              const label = cached && cached.status === 'done' ? formatPlaceLabel(r.muniName, cached) : r.muniName;
+              // Named like the ranking rows: detail name once fetched (queued below).
+              const label = formatPlaceLabel(r.muniName, state.placeLabelCache.get(r.clusterId));
               return (
-                `<li><button type="button" class="link-btn nearby-item" data-cluster-id="${r.clusterId}" data-muni-code="${r.muniCode ?? ''}">${escapeHtml(label)}</button>` +
+                `<li><button type="button" class="link-btn nearby-item" data-cluster-id="${r.clusterId}" data-href="place:${r.clusterId}" data-muni-code="${r.muniCode ?? ''}">` +
+                `<span class="detail-name" data-cluster-id="${r.clusterId}" data-muni-name="${escapeHtml(r.muniName)}">${escapeHtml(label)}</span></button>` +
                 `<span class="nearby-meta">${formatDistance(r.distance)} · ${tr('{n} 回', '{n}×', { n: r.count })}</span></li>`
               );
             })
@@ -493,6 +493,13 @@ export function renderPlaceDetail(derived, params) {
           '</ul>'
       );
     }
+
+    parts.push(`<h3 style="margin-top:16px;">${tr('滞在日一覧', 'Days stayed')}</h3><p class="panel-hint">${tr('日付をクリックすると、その日の経路マップを表示します。', 'Click a date to see the route map for that day.')}</p>`);
+    parts.push(
+      memberVisits
+        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" data-href="day:${v.dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: v.dateStr })}">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
+        .join('')
+    );
 
     // Stage 4 (issue #2): inline photo gallery for this place, reusing the
     // exact same grid markup/thumbnail-loading/lightbox as the map's photo
@@ -509,6 +516,11 @@ export function renderPlaceDetail(derived, params) {
     el.detailPanelContent.querySelectorAll('.day-item[data-date]').forEach((elDay) => {
       elDay.addEventListener('click', () => openDayView(elDay.dataset.date));
     });
+    // Nearby names, nearest first (render() emptied the queue on arrival here).
+    for (const r of nearby) {
+      const modal = computeModalVisitLocation(derived.displayData.visits.filter((v) => v.clusterId === r.clusterId));
+      if (modal) enqueueLabelFetch(r.clusterId, modal, false);
+    }
     el.detailPanelContent.querySelectorAll('.nearby-item').forEach((btn) => {
       btn.addEventListener('click', () => {
         const muni = state.municipalityByCode.get(btn.dataset.muniCode);
@@ -530,18 +542,29 @@ export function renderPlaceDetail(derived, params) {
       ui.map.panTo([modal.lat, modal.lng]);
     }
   } else {
-    // Privacy-mode municipality rollup: no coords, no Nominatim detail.
+    // Municipality summary (privacy-mode rollup, or a municipality opened
+    // from the address bar — possibly one never visited): no coords, no
+    // Nominatim detail.
     const scopedVisits = derived.displayData.visits.filter((v) => v.prefCode === code);
     const rows = computeClusterRanking({ visits: scopedVisits }, { privacy: true, municipalityByCode: state.municipalityByCode, limit: null });
     const row = rows.find((r) => r.muniCode === muniCode);
 
     parts.push(`<h2>${tr('市区町村', 'Municipality')}</h2>`);
     parts.push(`<div class="stat-row"><span class="label">${tr('都道府県', 'Prefecture')}</span><span>${prefEntry ? prefEntry.name : ''}</span></div>`);
-    parts.push(`<div class="stat-row"><span class="label">${tr('市区町村', 'Municipality')}</span><span>${row ? row.muniName : tr('不明', 'Unknown')}</span></div>`);
+    parts.push(`<div class="stat-row"><span class="label">${tr('市区町村', 'Municipality')}</span><span>${row ? row.muniName : municipalityName(state.municipalityByCode, muniCode)}</span></div>`);
     parts.push(`<div class="stat-row"><span class="label">${tr('この期間の滞在回数', 'Stays in this period')}</span><span>${tr('{n} 回', '{n}', { n: row ? row.count : 0 })}</span></div>`);
     parts.push(`<div class="stat-row"><span class="label">${tr('合計滞在時間', 'Total time spent')}</span><span>${row ? formatDuration(row.dwellMs) : '-'}</span></div>`);
     if (row && row.firstEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最初に訪れた日', 'First visit')}</span><span>${localDateStr(row.firstEpoch)}</span></div>`);
     if (row && row.lastEpoch) parts.push(`<div class="stat-row"><span class="label">${tr('最後に訪れた日', 'Last visit')}</span><span>${localDateStr(row.lastEpoch)}</span></div>`);
+    if (!row) {
+      const muniEntry = derived.muniAggregates.get(muniCode);
+      const note = muniEntry && isPassOnly(muniEntry)
+        ? tr('この期間は通過しただけで、滞在の記録はありません。', 'You only passed through here in this period; there are no stays.')
+        : muniEntry && muniEntry.stayCount > 0
+          ? tr('この期間の滞在は、すべて除外ゾーン内のため表示していません。', 'All stays here in this period are inside exclusion zones, so none are shown.')
+          : tr('この期間に訪れた記録はありません。', 'No visits here in this period.');
+      parts.push(`<p class="empty-note">${note}</p>`);
+    }
     if (state.privacy) parts.push(`<div class="privacy-note">${tr('プライバシー保護モードのため、市区町村単位の情報のみ表示しています。', 'Privacy mode is on, so only municipality-level information is shown.')}</div>`);
 
     el.detailPanelContent.innerHTML = parts.join('');

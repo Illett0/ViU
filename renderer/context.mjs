@@ -140,6 +140,8 @@ export const el = {
   photoLightboxImg: document.getElementById('photo-lightbox-img'),
   photoLightboxCaption: document.getElementById('photo-lightbox-caption'),
   btnPhotoLightboxClose: document.getElementById('btn-photo-lightbox-close'),
+  linkStatus: document.getElementById('link-status'),
+  toast: document.getElementById('toast'),
 };
 
 export const ui = {
@@ -152,7 +154,9 @@ export const ui = {
   pendingZoneCenter: null,
   currentDetailPrefCode: null,
   currentMarkersByKey: new Map(),
-  keepViewOnce: false, // set by leavePlaceKeepingView (mapTab.mjs): skip the next render's fitBounds/zoom
+  keepViewOnce: false, // set by leavePlaceKeepingView (mapTab.mjs) and browserNav.mjs's prepareRestore: skip the next render's fitBounds/zoom
+  visitedHrefs: new Set(), // browserNav.mjs: data-href keys of pages opened this session (memory only)
+  toastTimer: null,
 };
 
 export const dayViewLayerRef = { layer: null };

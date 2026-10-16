@@ -32,6 +32,13 @@ async function main() {
       assert(!items.some((i) => i.id === rowA.clusterId), 'the place itself is not listed');
     });
 
+    await step('nearby stay points come before the days list and are named by their fetched detail name', async () => {
+      const order = await page.$$eval('#detail-panel-content h3', (ns) => ns.map((n) => n.textContent));
+      assert(order.indexOf('近くの滞在地点') >= 0 && order.indexOf('近くの滞在地点') < order.indexOf('滞在日一覧'), JSON.stringify(order));
+      const sel = `#detail-panel-content .nearby-item[data-cluster-id="${rowB.clusterId}"]`;
+      await page.waitForFunction((s) => /^stub 35\.6821,139\.7671（千代田区）$/.test(document.querySelector(s).textContent), sel, { timeout: 10000 });
+    });
+
     await step('clicking a nearby stay point opens it, and back returns', async () => {
       await page.click(`#detail-panel-content .nearby-item[data-cluster-id="${rowB.clusterId}"]`);
       let v = await getView(page);

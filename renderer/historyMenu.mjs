@@ -5,6 +5,7 @@
 // right-clicking either of them.
 
 import { escapeHtml, formatPlaceLabel, municipalityName } from './aggregate.mjs';
+import { goTo } from './state.mjs';
 import { el, state } from './context.mjs';
 import { tr } from './i18n.mjs';
 import { stopTimelapse } from './timelapse.mjs';
@@ -15,10 +16,19 @@ function prefName(code) {
   return pref ? pref.name : tr('県', 'Prefecture');
 }
 
+export const TAB_LABELS = {
+  route: () => tr('経路マップ', 'Route Map'),
+  chronology: () => tr('年表', 'Chronology'),
+  stats: () => tr('移動統計', 'Travel Stats'),
+};
+
 // Same wording as the breadcrumb, but a place is named by where it is
 // (municipality, plus its detail name once fetched) rather than just
-// 「滞在地点」, so entries in the list can be told apart.
+// 「滞在地点」, so entries in the list can be told apart. Tab and day-view
+// pages are named after the tab / the day.
 export function historyEntryLabel(entry) {
+  if (entry.day) return tr('{d} の1日ビュー', 'Day view: {d}', { d: entry.day });
+  if (TAB_LABELS[entry.tab]) return TAB_LABELS[entry.tab]();
   if (entry.view === 'national') return tr('日本地図', 'Japan');
   const pref = prefName(entry.params.code);
   if (entry.view === 'prefecture') return pref;
@@ -46,7 +56,7 @@ function close({ restoreFocus = false } = {}) {
   if (restoreFocus) el.btnHistory.focus();
 }
 
-function open() {
+export function openHistoryMenu() {
   if (!state.raw || state.history.length <= 1) return;
   const items = state.history
     .map((entry, i) => ({ entry, i }))
@@ -74,10 +84,10 @@ function jumpTo(index) {
   close();
   if (index === state.historyIndex) return;
   stopTimelapse();
-  state.historyIndex = index;
-  state.tab = 'map';
+  goTo(state, index);
   render();
-  el.btnHistory.focus();
+  // A day-view page takes focus into its dialog instead.
+  if (el.dayViewOverlay.hidden) el.btnHistory.focus();
 }
 
 export function updateHistoryButton() {
@@ -86,11 +96,11 @@ export function updateHistoryButton() {
 }
 
 export function wireHistoryMenu() {
-  el.btnHistory.addEventListener('click', () => (isOpen() ? close() : open()));
+  el.btnHistory.addEventListener('click', () => (isOpen() ? close() : openHistoryMenu()));
   for (const btn of [el.btnBack, el.btnForward]) {
     btn.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      open();
+      openHistoryMenu();
     });
   }
   el.historyMenu.addEventListener('keydown', (e) => {
