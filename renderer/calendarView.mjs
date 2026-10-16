@@ -54,7 +54,7 @@ function yearGrid(year, counts, max, clickable) {
     const lv = level(count, max);
     if (count > 0 && clickable) {
       cells.push(
-        `<button type="button" class="cal-day lv${lv}" style="${style}" data-day="${ds}" title="${ds}"` +
+        `<button type="button" class="cal-day lv${lv}" style="${style}" data-day="${ds}" data-href="day:${ds}" title="${ds}"` +
           ` aria-label="${tr('{d}（記録 {n} 件）の経路を表示', 'Show the route for {d} ({n} records)', { d: ds, n: count })}"></button>`
       );
     } else {

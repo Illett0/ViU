@@ -378,7 +378,7 @@ export function renderPrefectureDetail(derived, code) {
             r.clusterId != null && !state.privacy
               ? `<span class="detail-name" data-cluster-id="${r.clusterId}" data-muni-name="${escapeHtml(r.muniName)}">${escapeHtml(formatPlaceLabel(r.muniName, state.placeLabelCache.get(r.clusterId)))}</span>`
               : r.muniName;
-          return `<div class="place-item" data-cluster-id="${r.clusterId ?? ''}" data-muni-code="${r.muniCode ?? ''}"><span class="place-count">${tr('{n}回', '{n}×', { n: r.count })}</span> — ${nameHtml}</div>`;
+          return `<div class="place-item" data-cluster-id="${r.clusterId ?? ''}" data-muni-code="${r.muniCode ?? ''}" data-href="${r.clusterId != null ? `place:${r.clusterId}` : `muni:${r.muniCode}`}"><span class="place-count">${tr('{n}回', '{n}×', { n: r.count })}</span> — ${nameHtml}</div>`;
         })
         .join('')
     );
@@ -461,7 +461,7 @@ export function renderPlaceDetail(derived, params) {
     parts.push(`<h3 style="margin-top:16px;">${tr('滞在日一覧', 'Days stayed')}</h3><p class="panel-hint">${tr('日付をクリックすると、その日の経路マップを表示します。', 'Click a date to see the route map for that day.')}</p>`);
     parts.push(
       memberVisits
-        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: v.dateStr })}">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
+        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" data-href="day:${v.dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: v.dateStr })}">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
         .join('')
     );
 
@@ -485,7 +485,7 @@ export function renderPlaceDetail(derived, params) {
               const cached = state.placeLabelCache.get(r.clusterId);
               const label = cached && cached.status === 'done' ? formatPlaceLabel(r.muniName, cached) : r.muniName;
               return (
-                `<li><button type="button" class="link-btn nearby-item" data-cluster-id="${r.clusterId}" data-muni-code="${r.muniCode ?? ''}">${escapeHtml(label)}</button>` +
+                `<li><button type="button" class="link-btn nearby-item" data-cluster-id="${r.clusterId}" data-href="place:${r.clusterId}" data-muni-code="${r.muniCode ?? ''}">${escapeHtml(label)}</button>` +
                 `<span class="nearby-meta">${formatDistance(r.distance)} · ${tr('{n} 回', '{n}×', { n: r.count })}</span></li>`
               );
             })

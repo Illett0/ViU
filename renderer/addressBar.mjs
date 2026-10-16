@@ -112,7 +112,6 @@ function go(r) {
     openDayView(r.dateStr);
     return;
   }
-  state.tab = 'map';
   if (r.kind === 'prefecture') {
     navigateTo(state, 'prefecture', { code: r.code });
   } else if (r.kind === 'municipality') {

@@ -2,7 +2,7 @@
 // remaining top-level event wiring. Feature areas live in their own modules
 // (see context.mjs for the shared state they all read/write).
 
-import { currentView, navigateTo, goBack, goForward, canGoBack, canGoForward } from './state.mjs';
+import { currentView, navigateTo, navigateWithin, resetHistory, canGoBack, canGoForward } from './state.mjs';
 import { applyPrivacyZoomLimit } from './mapView.mjs';
 import { renderStats } from './statsView.mjs';
 import { renderChronology } from './chronologyView.mjs';
@@ -12,7 +12,8 @@ import { resetLabelQueue } from './labels.mjs';
 import { localizePrefectureNames, populateYearOptions, recluster, refreshRecentFilesList, wireLoading } from './loading.mjs';
 import { initPhotoLink, showUnlinkedPhotoFolder, wirePhotos } from './photos.mjs';
 import { renderBreadcrumb, renderMapTab } from './mapTab.mjs';
-import { dayRecordCounts, openDayView, renderRouteTab, wireRouteTab } from './routeTab.mjs';
+import { dayRecordCounts, openDayView, renderRouteTab, syncDayView, wireRouteTab } from './routeTab.mjs';
+import { decorateLinks, historyBack, historyForward, markVisited, prepareRestore, restoreScroll, wireBrowserNav } from './browserNav.mjs';
 import { renderCalendar } from './calendarView.mjs';
 import { refreshComparePeriodOptions, renderCompare, wireCompare } from './compareView.mjs';
 import { stopTimelapse, wireTimelapse } from './timelapse.mjs';
@@ -54,6 +55,8 @@ export function getDerived({ filter = state.filter } = {}) {
 export function render() {
   if (!state.raw) return;
   state.renderGen += 1;
+  // Before anything is re-rendered: what a day view opened now returns focus to.
+  const focusedBefore = document.activeElement;
 
   el.btnBack.disabled = !canGoBack(state);
   el.btnForward.disabled = !canGoForward(state);
@@ -95,6 +98,10 @@ export function render() {
   el.statsScreen.hidden = state.tab !== 'stats';
 
   const view = currentView(state);
+  // Back/forward/history jump: draw the page as it was left (browserNav.mjs).
+  const restoring = state.restoring;
+  state.restoring = false;
+  if (restoring) prepareRestore(view);
   const showingPrefRanking = state.tab === 'map' && view.view === 'prefecture' && !state.privacy;
   if (!showingPrefRanking) {
     resetLabelQueue();
@@ -145,11 +152,23 @@ export function render() {
       onConquestClick: (row) => {
         setGranularity('municipality');
         navigateTo(state, 'prefecture', { code: row.code });
-        state.tab = 'map';
         render();
       },
     });
   }
+
+  // A page's day view sits on top of whichever tab it was opened from.
+  syncDayView(state.privacy || state.photosOnlyMode ? null : view.day, focusedBefore);
+  if (restoring) restoreScroll(view);
+  markVisited(view);
+  decorateLinks();
+}
+
+// Tabs are pages of their own (browserNav.mjs): switching pushes history.
+export function switchTab(tab) {
+  if (tab === state.tab) return;
+  navigateWithin(state, { tab });
+  render();
 }
 
 // Year/month filter, cluster-distance threshold, and privacy-mode changes all
@@ -160,8 +179,7 @@ export function render() {
 // than try to carry the old selection forward, just drop back to the
 // national view, per spec.
 export function resetNavigationToNational() {
-  state.history = [{ view: 'national', params: {} }];
-  state.historyIndex = 0;
+  resetHistory(state);
   ui.lastMapContext = null;
 }
 
@@ -202,7 +220,6 @@ export function renderChronologyTab(derived) {
     includeMunicipalities: state.chronologyIncludeMuni,
   });
   renderChronology(el.chronologyContent, events, (ev) => {
-    state.tab = 'map';
     if (ev.type === 'prefecture') {
       setGranularity('prefecture');
       navigateTo(state, 'prefecture', { code: ev.code });
@@ -223,16 +240,8 @@ export function renderChronologyTab(derived) {
   });
 }
 
-el.btnBack.addEventListener('click', () => {
-  stopTimelapse();
-  goBack(state);
-  render();
-});
-el.btnForward.addEventListener('click', () => {
-  stopTimelapse();
-  goForward(state);
-  render();
-});
+el.btnBack.addEventListener('click', () => historyBack());
+el.btnForward.addEventListener('click', () => historyForward());
 
 function updatePrivacyLabel() {
   el.btnPrivacy.classList.toggle('off', !state.privacy);
@@ -291,8 +300,7 @@ el.clusterThresholdInput.addEventListener('change', () => {
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.disabled) return;
-    state.tab = btn.dataset.tab;
-    render();
+    switchTab(btn.dataset.tab);
   });
 });
 
@@ -365,6 +373,7 @@ wireHistoryMenu();
 wireBookmarks();
 wireAddressBar();
 wireCompare();
+wireBrowserNav();
 installTestHooks();
 // Static markup is visible (and clickable) before this module graph has run;
 // style.css keeps #app hidden until here so nobody sees the untranslated page

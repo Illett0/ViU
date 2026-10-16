@@ -7,6 +7,8 @@ import { applyPhotoEstimates } from './photos.mjs';
 import { stopTimelapse } from './timelapse.mjs';
 import { handleMapBackgroundClick } from './mapTab.mjs';
 import { render, resetNavigationToNational, scheduleMuniViewportRedraw } from './app.mjs';
+import { resetHistory } from './state.mjs';
+import { clearVisited } from './browserNav.mjs';
 import { localizePrefectureRecords, tr } from './i18n.mjs';
 
 const MONTH_NAMES_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -175,8 +177,8 @@ export async function finishLoadingIntoApp() {
   state.municipalityByCode = buildMunicipalityIndex(state.raw.municipalities);
   state.clusterThreshold = 50;
   applyPhotoEstimates(); // a folder linked before this was open may now gain Stage3 estimates
-  state.history = [{ view: 'national', params: {} }];
-  state.historyIndex = 0;
+  resetHistory(state);
+  clearVisited();
   state.filter = { year: null, month: null };
   state.dismissedSuggestions = new Set();
   ui.lastMapContext = null;
@@ -251,6 +253,7 @@ export async function recluster(threshold) {
     state.raw.clusters = result.clusters;
     el.clusterThresholdLabel.textContent = threshold + 'm';
     resetNavigationToNational();
+    clearVisited(); // cluster ids no longer mean the same places
     render();
   } catch (err) {
     el.clusterThresholdLabel.textContent = threshold + tr('m （失敗）', 'm (failed)');

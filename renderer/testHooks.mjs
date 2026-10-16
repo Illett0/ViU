@@ -9,7 +9,7 @@ import { togglePhotoLayer } from './photos.mjs';
 import { resetTimelapse, startTimelapse, stopTimelapse } from './timelapse.mjs';
 import { closeSettings, openSettings, persistZones } from './settings.mjs';
 import { openDayView, getDayViewState } from './routeTab.mjs';
-import { getDerived, render, setGranularity, setPrivacy } from './app.mjs';
+import { getDerived, render, setGranularity, setPrivacy, switchTab } from './app.mjs';
 
 export function installTestHooks() {
   // Exposed for UI-automation / E2E testing only (Leaflet polygon clicks are hard to
@@ -24,8 +24,7 @@ export function installTestHooks() {
       render();
     },
     setTab(tab) {
-      state.tab = tab;
-      render();
+      switchTab(tab);
     },
     setPrivacy,
     setClusterThreshold(threshold) {

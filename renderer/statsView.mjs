@@ -193,7 +193,7 @@ export function renderStats(
   // (not under privacy mode, where the route views are off).
   const dayLink = (dateStr) =>
     onDayClick && dateStr
-      ? `<button type="button" class="link-btn" data-day="${dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: dateStr })}">${dateStr}</button>`
+      ? `<button type="button" class="link-btn" data-day="${dateStr}" data-href="day:${dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: dateStr })}">${dateStr}</button>`
       : dateStr || '-';
 
   const grid = document.createElement('div');
@@ -347,7 +347,7 @@ export function renderStats(
     list.innerHTML = conquestRates
       .map(
         (r, i) =>
-          `<li class="place-item" data-code="${r.code}"><span>${i + 1}. ${r.name}</span><span class="rank-count">${r.visited} / ${r.total}${tr('（{p}%）', ' ({p}%)', { p: (r.rate * 100).toFixed(0) })}${r.passOnly ? `<span class="pass-only-note">${tr(' ＋通過のみ {n}', ' +{n} passed through', { n: r.passOnly })}</span>` : ''}</span></li>`
+          `<li class="place-item" data-code="${r.code}" data-href="pref:${r.code}"><span>${i + 1}. ${r.name}</span><span class="rank-count">${r.visited} / ${r.total}${tr('（{p}%）', ' ({p}%)', { p: (r.rate * 100).toFixed(0) })}${r.passOnly ? `<span class="pass-only-note">${tr(' ＋通過のみ {n}', ' +{n} passed through', { n: r.passOnly })}</span>` : ''}</span></li>`
       )
       .join('');
     container.appendChild(list);
