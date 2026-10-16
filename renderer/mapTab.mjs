@@ -7,7 +7,7 @@ import { renderPhotoLayer, clearPhotoLayer, galleryHtml, loadGalleryThumbnails, 
 import { formatDuration } from './statsView.mjs';
 import { distanceMeters, destinationPoint, isPassOnly, computeModalVisitLocation, municipalityName, formatPlaceLabel, escapeHtml, dwellMs, computeClusterRanking, localDateStr } from './aggregate.mjs';
 import { el, geojsonLayerRef, markerLayerRef, photoLayerRef, state, timelapsePointsRef, ui } from './context.mjs';
-import { resetLabelQueue, watchRankingRowsForLabelFetch } from './labels.mjs';
+import { enqueueLabelFetch, resetLabelQueue, watchRankingRowsForLabelFetch } from './labels.mjs';
 import { getVisiblePhotos, openPhotoLightbox, photosForPlace, resolvePlaceName } from './photos.mjs';
 import { openDayView } from './routeTab.mjs';
 import { render } from './app.mjs';
@@ -458,13 +458,6 @@ export function renderPlaceDetail(derived, params) {
     if (modal) {
       parts.push(`<div class="stat-row"><span class="label">${tr('座標（補助情報）', 'Coordinates (for reference)')}</span><span>${modal.lat.toFixed(4)}, ${modal.lng.toFixed(4)}</span></div>`);
     }
-    parts.push(`<h3 style="margin-top:16px;">${tr('滞在日一覧', 'Days stayed')}</h3><p class="panel-hint">${tr('日付をクリックすると、その日の経路マップを表示します。', 'Click a date to see the route map for that day.')}</p>`);
-    parts.push(
-      memberVisits
-        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" data-href="day:${v.dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: v.dateStr })}">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
-        .join('')
-    );
-
     // Related links (issue #34): the nearest other stay points, so the map
     // can be browsed place to place. Same zone-filtered rows as the ranking.
     const anchor = modal || first;
@@ -481,11 +474,11 @@ export function renderPlaceDetail(derived, params) {
         '<ul class="nearby-list">' +
           nearby
             .map((r) => {
-              // Only a fetched detail name is shown; these rows don't queue fetches.
-              const cached = state.placeLabelCache.get(r.clusterId);
-              const label = cached && cached.status === 'done' ? formatPlaceLabel(r.muniName, cached) : r.muniName;
+              // Named like the ranking rows: detail name once fetched (queued below).
+              const label = formatPlaceLabel(r.muniName, state.placeLabelCache.get(r.clusterId));
               return (
-                `<li><button type="button" class="link-btn nearby-item" data-cluster-id="${r.clusterId}" data-href="place:${r.clusterId}" data-muni-code="${r.muniCode ?? ''}">${escapeHtml(label)}</button>` +
+                `<li><button type="button" class="link-btn nearby-item" data-cluster-id="${r.clusterId}" data-href="place:${r.clusterId}" data-muni-code="${r.muniCode ?? ''}">` +
+                `<span class="detail-name" data-cluster-id="${r.clusterId}" data-muni-name="${escapeHtml(r.muniName)}">${escapeHtml(label)}</span></button>` +
                 `<span class="nearby-meta">${formatDistance(r.distance)} · ${tr('{n} 回', '{n}×', { n: r.count })}</span></li>`
               );
             })
@@ -493,6 +486,13 @@ export function renderPlaceDetail(derived, params) {
           '</ul>'
       );
     }
+
+    parts.push(`<h3 style="margin-top:16px;">${tr('滞在日一覧', 'Days stayed')}</h3><p class="panel-hint">${tr('日付をクリックすると、その日の経路マップを表示します。', 'Click a date to see the route map for that day.')}</p>`);
+    parts.push(
+      memberVisits
+        .map((v) => (v.dateStr ? `<button type="button" class="place-item day-item" data-date="${v.dateStr}" data-href="day:${v.dateStr}" aria-label="${tr('{d} の経路を表示', 'Show the route for {d}', { d: v.dateStr })}">${v.dateStr}</button>` : '<div class="place-item">-</div>'))
+        .join('')
+    );
 
     // Stage 4 (issue #2): inline photo gallery for this place, reusing the
     // exact same grid markup/thumbnail-loading/lightbox as the map's photo
@@ -509,6 +509,11 @@ export function renderPlaceDetail(derived, params) {
     el.detailPanelContent.querySelectorAll('.day-item[data-date]').forEach((elDay) => {
       elDay.addEventListener('click', () => openDayView(elDay.dataset.date));
     });
+    // Nearby names, nearest first (render() emptied the queue on arrival here).
+    for (const r of nearby) {
+      const modal = computeModalVisitLocation(derived.displayData.visits.filter((v) => v.clusterId === r.clusterId));
+      if (modal) enqueueLabelFetch(r.clusterId, modal, false);
+    }
     el.detailPanelContent.querySelectorAll('.nearby-item').forEach((btn) => {
       btn.addEventListener('click', () => {
         const muni = state.municipalityByCode.get(btn.dataset.muniCode);

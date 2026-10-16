@@ -1,5 +1,5 @@
 // On-demand detail-name (Nominatim/Overpass) fetching for the prefecture-detail
-// ranking rows and their map pin tooltips.
+// ranking rows and their map pin tooltips, and a stay point's nearby list.
 
 import { computeModalVisitLocation, formatPlaceLabel, escapeHtml } from './aggregate.mjs';
 import { el, state, ui } from './context.mjs';
@@ -39,11 +39,9 @@ export function resetLabelQueue() {
 
 export function updateRowLabelDisplay(clusterId) {
   const entry = state.placeLabelCache.get(clusterId);
-  const target = el.detailPanelContent.querySelector(`.detail-name[data-cluster-id="${clusterId}"]`);
-  if (target) {
-    const muniName = target.dataset.muniName;
-    target.textContent = formatPlaceLabel(muniName, entry);
-  }
+  el.detailPanelContent.querySelectorAll(`.detail-name[data-cluster-id="${clusterId}"]`).forEach((target) => {
+    target.textContent = formatPlaceLabel(target.dataset.muniName, entry);
+  });
   const marker = ui.currentMarkersByKey.get(clusterId);
   if (marker) {
     const muniName = marker.__muniName;
